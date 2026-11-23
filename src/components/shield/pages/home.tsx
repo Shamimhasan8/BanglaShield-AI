@@ -6,7 +6,7 @@
 // MobileTabBar, router, Guardian and all analysis APIs remain untouched.
 // Every sample below is explicitly fictional — never a live detection feed.
 
-import { useRef, useState, type ComponentType, type KeyboardEvent } from "react";
+import { type ComponentType } from "react";
 import { Link } from "../router";
 import { useLang } from "../i18n";
 import { usePrefersReducedMotion } from "../store";
@@ -96,19 +96,6 @@ function LinkIcon({ size = 24, className }: IconProps) {
   );
 }
 
-function PhoneIcon({ size = 24, className }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path
-        d="M7.3 3.5 4.5 5.8c-.7.6-.8 1.7-.4 2.7 2.3 5.4 6.1 9.2 11.5 11.5 1 .4 2.1.3 2.7-.4l2.3-2.8-4.5-4-2.1 1.9a16 16 0 0 1-4.7-4.7l1.9-2.1-3.9-4.4Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Content — bilingual (bn default, en via the global header language toggle).
 // ---------------------------------------------------------------------------
@@ -122,71 +109,7 @@ const HERO = {
     en: "A suspicious call, message, image or link? Understand it before fear takes over. Guardian helps you see the evidence, understand the risk and choose your next step.",
   },
   note: { bn: "সহজ বাংলা · ব্যবহারকারীর নিয়ন্ত্রণে · এআই ভুল করতে পারে", en: "Plain language · You stay in control · AI can be wrong" },
-  tablistLabel: { bn: "কাল্পনিক প্রতারণার উদাহরণ", en: "Fictional scam examples" },
-  demoLabel: { bn: "ইন্টারঅ্যাকটিভ উদাহরণ · বাস্তব এআই বিশ্লেষণ নয়", en: "Interactive example · not a live AI analysis" },
-  caption: {
-    bn: "আপনার সিদ্ধান্ত আপনারই। Guardian শুধু ঝুঁকি ও নিরাপদ পথ বুঝতে সাহায্য করে।",
-    en: "Your decision stays yours. Guardian helps you understand safer options.",
-  },
 };
-
-type Example = {
-  tab: Bi;
-  inputTitle: Bi;
-  inputText: Bi;
-  inputFlag: Bi;
-  outputTitle: Bi;
-  outputText: Bi;
-  outputFlag: Bi;
-};
-
-const EXAMPLES: Example[] = [
-  {
-    tab: { bn: "ভুয়া ভয়েস কল", en: "Suspicious call" },
-    inputTitle: { bn: "সন্দেহজনক কলে", en: "Suspicious call" },
-    inputText: {
-      bn: "“মা, খুব বিপদে আছি। এখনই ৫০,০০০ টাকা পাঠাও। কাউকে বোলো না।”",
-      en: "“Mom, I’m in trouble. Send 50,000 taka now. Don’t tell anyone.”",
-    },
-    inputFlag: { bn: "তাড়াহুড়া ও গোপনীয়তার চাপ", en: "Urgency and secrecy pressure" },
-    outputTitle: { bn: "Guardian-এর পরামর্শ", en: "Guardian’s guidance" },
-    outputText: {
-      bn: "টাকা পাঠাবেন না। আগে ছেলের পরিচিত নম্বরে নিজে ফোন করে যাচাই করুন।",
-      en: "Don’t send money. Call your son using his known number first.",
-    },
-    outputFlag: { bn: "আগে যাচাই, তারপর সিদ্ধান্ত", en: "Verify first, decide second" },
-  },
-  {
-    tab: { bn: "সন্দেহজনক বার্তা", en: "Suspicious message" },
-    inputTitle: { bn: "সন্দেহজনক বার্তা", en: "Suspicious message" },
-    inputText: {
-      bn: "“আপনার উপবৃত্তির টাকা আটকে গেছে। এখনই OTP দিয়ে নিশ্চিত করুন।”",
-      en: "“Your stipend is on hold. Confirm immediately using your OTP.”",
-    },
-    inputFlag: { bn: "ব্যক্তিগত কোড চাওয়া হয়েছে", en: "Sensitive code requested" },
-    outputTitle: { bn: "Guardian-এর পরামর্শ", en: "Guardian’s guidance" },
-    outputText: {
-      bn: "OTP কাউকে দেবেন না। সংশ্লিষ্ট প্রতিষ্ঠানের সরকারি চ্যানেলে খোঁজ নিন।",
-      en: "Never share your OTP. Contact the institution through its official channel.",
-    },
-    outputFlag: { bn: "কোড গোপন রাখুন", en: "Keep your code private" },
-  },
-  {
-    tab: { bn: "ভুয়া লিংক", en: "Suspicious link" },
-    inputTitle: { bn: "ভুয়া লিংক", en: "Suspicious link" },
-    inputText: {
-      bn: "“আজই আবেদন করুন: scholarship-verify.example”",
-      en: "“Apply today: scholarship-verify.example”",
-    },
-    inputFlag: { bn: "অচেনা ডোমেইন ও জরুরি চাপ", en: "Unknown domain and urgency" },
-    outputTitle: { bn: "Guardian-এর পরামর্শ", en: "Guardian’s guidance" },
-    outputText: {
-      bn: "লিংকটি খোলার আগে প্রতিষ্ঠানের নিজস্ব ওয়েবসাইট থেকে ঠিকানা যাচাই করুন।",
-      en: "Before opening, verify the address through the institution’s actual website.",
-    },
-    outputFlag: { bn: "স্বাধীনভাবে সূত্র মিলিয়ে দেখুন", en: "Verify sources independently" },
-  },
-];
 
 const TOOLS_HEAD = {
   label: "THE FIRST STEP",
@@ -327,7 +250,7 @@ const END = {
 };
 
 // ---------------------------------------------------------------------------
-// Decorative art — the soft aura strokes and the concentric Guardian halo.
+// Decorative art — the soft aura strokes.
 // ---------------------------------------------------------------------------
 
 function Aura({ className }: { className: string }) {
@@ -336,21 +259,6 @@ function Aura({ className }: { className: string }) {
       <path d="M250-10C345 78 82 126 200 212S342 355 90 415" stroke="#6bbf8e" strokeWidth="46" fill="none" opacity=".13" />
       <path d="M265-10C361 80 98 139 222 222S347 344 105 414" stroke="#1f9662" strokeWidth="2" fill="none" opacity=".28" />
     </svg>
-  );
-}
-
-function GuardianHalo() {
-  return (
-    <div className="bsh-halo" aria-hidden="true">
-      <svg viewBox="0 0 320 265">
-        <circle cx="160" cy="132" r="102" stroke="#8ac5a0" strokeWidth=".8" strokeDasharray="3 7" fill="none" />
-        <circle cx="160" cy="132" r="78" stroke="#a6d9b5" strokeWidth="1.3" fill="none" />
-        <circle cx="160" cy="132" r="55" stroke="#c4e6ce" strokeWidth="20" fill="none" opacity=".40" />
-        <path d="M18 136H64 M256 136h46" stroke="#9dccac" strokeWidth="2" strokeDasharray="4 7" fill="none" />
-        <circle cx="48" cy="136" r="4" fill="#399a65" />
-        <circle cx="273" cy="136" r="4" fill="#399a65" />
-      </svg>
-    </div>
   );
 }
 
@@ -363,25 +271,8 @@ const STORY_WAVE_HEIGHTS = [10, 17, 26, 38, 20, 47, 30, 21, 35, 16, 27, 12];
 export default function HomePage() {
   const bn = useLang() === "bn";
   const still = usePrefersReducedMotion();
-  const [tab, setTab] = useState(0);
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const t = (v: Bi) => (bn ? v.bn : v.en);
-  const example = EXAMPLES[tab];
-
-  // Proper tab semantics: arrow keys move between the three sample tabs.
-  const onTabsKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const last = EXAMPLES.length - 1;
-    let next: number | null = null;
-    if (e.key === "ArrowRight") next = tab === last ? 0 : tab + 1;
-    else if (e.key === "ArrowLeft") next = tab === 0 ? last : tab - 1;
-    else if (e.key === "Home") next = 0;
-    else if (e.key === "End") next = last;
-    if (next === null) return;
-    e.preventDefault();
-    setTab(next);
-    tabRefs.current[next]?.focus();
-  };
 
   return (
     <div className={still ? "bsh-home bsh-still" : "bsh-home"}>
@@ -403,79 +294,6 @@ export default function HomePage() {
             <p className="bsh-hero-sub">{t(HERO.sub)}</p>
             <p className="bsh-note">{t(HERO.note)}</p>
           </div>
-
-          {/* Three accessible demo tabs — explicit sample UI, never a live feed. */}
-          <div className="bsh-demo-tabs" role="tablist" aria-label={t(HERO.tablistLabel)} onKeyDown={onTabsKeyDown}>
-            {EXAMPLES.map((x, i) => (
-              <button
-                key={i}
-                ref={(el) => {
-                  tabRefs.current[i] = el;
-                }}
-                type="button"
-                role="tab"
-                id={`bsh-demo-tab-${i}`}
-                aria-selected={tab === i}
-                aria-controls="bsh-demo-scene"
-                tabIndex={tab === i ? 0 : -1}
-                className="bsh-demo-tab"
-                onClick={() => setTab(i)}
-              >
-                {t(x.tab)}
-              </button>
-            ))}
-          </div>
-          <p className="bsh-demo-label">{t(HERO.demoLabel)}</p>
-
-          <div
-            className="bsh-hero-scene"
-            id="bsh-demo-scene"
-            role="tabpanel"
-            aria-labelledby={`bsh-demo-tab-${tab}`}
-            aria-live="polite"
-          >
-            <div className="bsh-scene-card">
-              <div className="bsh-card-top">
-                <span className="circle">
-                  <PhoneIcon size={14} />
-                </span>
-                <span>{t(example.inputTitle)}</span>
-              </div>
-              <div className="bsh-demo-sample">
-                <p>{t(example.inputText)}</p>
-                <span className="bsh-card-foot">
-                  <span aria-hidden="true">●</span>
-                  <span>{t(example.inputFlag)}</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="bsh-hero-center">
-              <GuardianHalo />
-              <div className="bsh-shield">
-                <ShieldIcon size={55} className="text-[#1a6847]" />
-              </div>
-              <div className="bsh-shield-label">Guardian</div>
-            </div>
-
-            <div className="bsh-scene-card bsh-advice">
-              <div className="bsh-card-top">
-                <span className="circle">
-                  <ShieldIcon size={14} />
-                </span>
-                <span>{t(example.outputTitle)}</span>
-              </div>
-              <div className="bsh-demo-sample">
-                <p>{t(example.outputText)}</p>
-                <span className="bsh-card-foot">
-                  <span aria-hidden="true">✓</span>
-                  <span>{t(example.outputFlag)}</span>
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <p className="bsh-scene-caption">{t(HERO.caption)}</p>
         </div>
       </section>
 

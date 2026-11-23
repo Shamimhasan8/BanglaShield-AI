@@ -212,152 +212,6 @@
   top: 35px;
   transform: scaleX(-1) rotate(-8deg);
 }
-.bsh-home .bsh-hero-scene {
-  position: relative;
-  z-index: 3;
-  margin: 48px auto 0;
-  max-width: 1010px;
-  display: grid;
-  grid-template-columns: 235px minmax(0, 1fr) 235px;
-  align-items: center;
-  gap: 13px;
-}
-.bsh-home .bsh-scene-card {
-  border: 1px solid #e0e9df;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: 0 20px 55px rgba(21, 64, 42, 0.07);
-  border-radius: 19px;
-  padding: 20px 18px;
-  position: relative;
-  z-index: 3;
-  min-height: 176px;
-  backdrop-filter: blur(12px);
-}
-.bsh-home .bsh-scene-card .bsh-card-top {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  color: #72907d;
-  margin-bottom: 16px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.bsh-home .bsh-scene-card .bsh-card-top .circle {
-  height: 20px;
-  width: 20px;
-  border-radius: 8px;
-  background: #e5f4e9;
-  display: grid;
-  place-items: center;
-  color: #26704f;
-}
-.bsh-home .bsh-scene-card p {
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.6;
-  color: #284838;
-}
-.bsh-home .bsh-scene-card .bsh-card-foot {
-  margin-top: 16px;
-  display: inline-flex;
-  gap: 7px;
-  align-items: center;
-  font-size: 10px;
-  color: #b36450;
-  font-weight: 700;
-}
-.bsh-home .bsh-scene-card.bsh-advice {
-  background: #ffffffec;
-}
-.bsh-home .bsh-scene-card.bsh-advice .bsh-card-foot {
-  color: #2b8558;
-}
-.bsh-home .bsh-hero-center {
-  min-height: 265px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-.bsh-home .bsh-halo {
-  position: absolute;
-  width: min(320px, 100%);
-  height: 265px;
-  animation: bsh-float 9s ease-in-out infinite;
-}
-.bsh-home .bsh-halo svg {
-  height: 100%;
-  width: 100%;
-  overflow: visible;
-}
-.bsh-home .bsh-shield {
-  position: relative;
-  width: 109px;
-  height: 109px;
-  background: linear-gradient(160deg, #ffffff, #eef9f1);
-  border: 1px solid #fff;
-  box-shadow:
-    0 15px 55px #32885837,
-    inset 0 0 0 7px #e9f6ed;
-  display: grid;
-  place-items: center;
-  border-radius: 31px;
-  transform: rotate(-6deg);
-}
-.bsh-home .bsh-shield svg {
-  transform: rotate(6deg);
-}
-.bsh-home .bsh-shield-label {
-  position: absolute;
-  top: calc(50% + 66px);
-  font-weight: 700;
-  font-size: 16px;
-  white-space: nowrap;
-}
-.bsh-home .bsh-scene-caption {
-  position: relative;
-  z-index: 3;
-  text-align: center;
-  color: #6d8a79;
-  font-size: 10px;
-  margin-top: 13px;
-}
-
-/* --- Demo tabs (explicit sample UI, never a live feed) --- */
-.bsh-home .bsh-demo-tabs {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 34px;
-  position: relative;
-  z-index: 2;
-  flex-wrap: wrap;
-}
-.bsh-home .bsh-demo-tab {
-  background: #ffffffa6;
-  color: #476957;
-  border: 1px solid #c5dfca;
-  border-radius: 99px;
-  padding: 7px 13px;
-  font-size: 11px;
-  transition: all 0.18s;
-}
-.bsh-home .bsh-demo-tab[aria-selected="true"] {
-  background: #1e6145;
-  color: #fff;
-  border-color: #1e6145;
-}
-.bsh-home .bsh-demo-label {
-  font-size: 10px;
-  text-align: center;
-  color: #72907f;
-  margin-top: 10px;
-}
-.bsh-home .bsh-demo-sample {
-  transition: opacity 0.16s ease;
-}
-
 /* --- Sections --- */
 .bsh-home .bsh-section {
   padding: 85px 0;
@@ -734,16 +588,6 @@
   background: #c7e8cc;
 }
 
-@keyframes bsh-float {
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-8px);
-  }
-}
-
 /* App-level "reduce motion" setting (Settings page) — complements the
    OS-level prefers-reduced-motion query below. Purely decorative motion. */
 .bsh-home.bsh-still *,
@@ -754,12 +598,6 @@
 }
 
 @media (max-width: 1000px) {
-  .bsh-home .bsh-hero-scene {
-    grid-template-columns: 205px minmax(0, 1fr) 205px;
-  }
-  .bsh-home .bsh-scene-card {
-    padding: 15px;
-  }
   .bsh-home .bsh-guardian-grid {
     gap: 25px;
   }
@@ -791,47 +629,6 @@
     font-size: 11px;
     min-height: 43px;
     padding: 10px 16px;
-  }
-  .bsh-home .bsh-hero-scene {
-    max-width: 360px;
-    margin-top: 28px;
-    grid-template-columns: 1fr 1fr;
-    gap: 9px;
-    align-items: start;
-  }
-  .bsh-home .bsh-hero-center {
-    grid-column: 1 / -1;
-    grid-row: 1;
-    min-height: 164px;
-  }
-  .bsh-home .bsh-halo {
-    width: 215px;
-    height: 170px;
-  }
-  .bsh-home .bsh-shield {
-    width: 78px;
-    height: 78px;
-    border-radius: 24px;
-  }
-  .bsh-home .bsh-shield-label {
-    top: calc(50% + 44px);
-    font-size: 13px;
-  }
-  .bsh-home .bsh-scene-card {
-    min-height: 142px;
-    padding: 12px;
-    border-radius: 14px;
-  }
-  .bsh-home .bsh-scene-card .bsh-card-top {
-    font-size: 9px;
-    margin-bottom: 9px;
-  }
-  .bsh-home .bsh-scene-card p {
-    font-size: 11px;
-  }
-  .bsh-home .bsh-scene-card .bsh-card-foot {
-    font-size: 9px;
-    margin-top: 12px;
   }
   .bsh-home .bsh-aura {
     width: 160px;
@@ -919,13 +716,6 @@
   }
   .bsh-home .bsh-actions {
     gap: 8px;
-  }
-  .bsh-home .bsh-demo-tabs {
-    margin-top: 24px;
-  }
-  .bsh-home .bsh-demo-tab {
-    font-size: 9px;
-    padding: 6px 10px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
