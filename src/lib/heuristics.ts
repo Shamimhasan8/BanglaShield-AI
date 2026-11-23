@@ -28,7 +28,14 @@ export interface HeuristicResult {
   speaker?: SpeakerContext;
 }
 
-const RX = (parts: string[], flags = "i") => new RegExp(parts.join("|"), flags);
+// V4 (fix): Bangla keyboards emit DECOMPOSED ya-phala (য + ় = U+09AF U+09BC)
+// while authored patterns often use the PRECOMPOSED glyph (য় = U+09DF).
+// JS RegExp performs no Unicode normalization, so every pattern containing
+// য়/যৌ silently failed on real user input. Normalizing BOTH sides to NFC
+// makes matching composition-independent. Same for the input text (see
+// detectScamIndicators).
+const RX = (parts: string[], flags = "i") =>
+  new RegExp(parts.map((p) => p.normalize("NFC")).join("|"), flags);
 
 // --- keyword groups ---------------------------------------------------------
 
@@ -36,16 +43,27 @@ const OTP_WORDS = RX([
   "otp", "ওটিপি", "ও\\.টি\\.পি", "one[\\s-]?time", "verification\\s*code",
   "ভেরিফিকেশন\\s*কোড", "ভেরিফিকেশন\\s*কড", "কনফার্মেশন\\s*কোড", "সিক্রেট\\s*কোড",
   "\\bpin\\b", "পিন\\s*নম্বর", "পিন\\s*কোড", "\\bpin\\s*number", "পাসওয়ার্ড", "password",
+  "পিন(?:টা|টি|টো)?\\s*(?:বল|দাও|দিন|দিয়ে)", "পিন\\s*দিয়ে\\s*দিন", "পিন\\s*দিয়ে",
+  "pin\\s*diye", "pin\\s*die\\b", "pin\\s*dia", "ওটিপি(?:টা|টি)?\\s*(?:বল|দাও|দিন)",
 ]);
 
 const REQUEST_VERBS = RX([
   "দিন", "দিয়ে\\s*দিন", "পাঠান", "পাঠিয়ে\\s*দিন", "বলুন", "জানান", "শেয়ার\\s*কর",
   "share", "send", "tell\\s*(?:me|us)", "provide", "confirm\\s*কর", "কনফার্ম\\s*কর", "দাও", "পাঠাও", "বলো",
+  "diben", "diye\\s*diben", "bolun", "bolen", "rakhen", "pathan", "pathiyen", "dao\\b",
 ]);
 
 // V3: advisory / negation framing. When these appear in the SAME SENTENCE as
 // an OTP-request match, the sentence is safety ADVICE, not a scam request.
 const ADVISORY_FRAMING = RX([
+  // V4: targeted advisory forms only — generic "verb+না" was intentionally
+  // NOT added because scam texts can include pressure negations ("ভুল করবেন না").
+  "শেয়ার\\s*কর(?:বেন|ব|তে)\\s*না", "কারও\\s*সাথে\\s*(?:শেয়ার|দিতে)\\s*না",
+  "দিতে\\s*পারবেন\\s*না", "পাঠাতে\\s*পারবেন\\s*না",
+  // V4: quoted-scam education & institution-behavior education
+  "চায়\\s*না", "চাইবে\\s*না", "প্রতারক", "প্রতারণা", "প্রতার", "মনে\\s*রাখ(?:ুন|বেন)",
+  "সচেতনতা", "চেতনা(?:-?পাঠ)?", "সচেতন\\s*হোন", "জানিয়ে\\s*দিন",
+  "scammer", "awareness", "never\\s+ask", "banks?\\s+never", "does\\s+n[o']t\\s+(?:ask|call|contact)",
   "দেবেন\\s*না", "দিবেন\\s*না", "দেওয়া\\s*নিষেধ", "দেওয়া\\s*যাবে\\s*না", "দেব\\s*না", "দিয়ো\\s*না",
   "কখনোই?\\s*না", "কখনো\\s*না", "না\\s*দিয়ে", "নিষেধ", "সাবধান", "সতর্ক", "বিরত\\s*থাক",
   "শেয়ার\\s*করবেন\\s*না", "শেয়ার\\s*করা\\s*নিষেধ", "চাইলেই\\s*দেবেন\\s*না", "দেখতে\\s*দেবেন\\s*না",
@@ -61,6 +79,8 @@ const URGENCY_WORDS = RX([
   "সাথে\\s*সাথেই", "আর\\s*দেরি\\s*নয়", "urgent", "immediately", "right\\s*now", "asap",
   "মিনিটের\\s*মধ্যে", "ঘণ্টার\\s*মধ্যে", "last\\s*warning", "অবহেলা\\s*করলে", "দেরি\\s*করলে",
   "সাথে\\s*সাথে\\s*না\\s*দিলে", "না\\s*দিলে\\s*(তোমার|আপনার)",
+  "nahole", "within\\s*\\d+\\s*(?:hours|minutes|days|day|hour)", "\\d+\\s*hours", "last\\s*chance",
+  "ghontar\\s*moddhe", "minit(?:er)?\\s*moddhe", "আজই", "শেষ\\s*সুযোগ\\s*হতে\\s*পারে",
 ]);
 
 const OFFICIAL_NAMES = RX([
@@ -72,7 +92,29 @@ const OFFICIAL_NAMES = RX([
   "সাইবার\\s*ট্রিব্যুনাল", "cirt", "সিআইআরটি", "গোয়েন্দা", "dbI", "rabi", "rabi\\s*wallet",
   "সরকার", "সরকারি", "govt", "government", "ডাকঘর", "স্বাস্থ্য\\s*অধিদপ্তর", "dghs",
   "বিআরটিসিএ", "btrc", "নির্বাচন\\s*কমিশন", "e-governance", "ই-গভর্নেন্স", "ebdc", "bank\\s*asia",
+  "\\bnid\\b", "জাতি\\s*পরিচয়পত্র", "জাতীয়\\s*পরিচয়পত্র", "জাতীয়\\s*আইডি", "national\\s*id", "জন্ম\\s*নিবন্ধন",
+  "eastern\\s*bank", "ebl\\b", "teletalk", "টেলিটক", "bcs\\s*tele", "city\\s*bank\\s*লিমিটেড",
   "মন্ত্রণালয়", "শিক্ষা\\s*মন্ত্রণালয়", "শিক্ষা\\s*বোর্ড", "ministry", "education\\s*board",
+]);
+
+// V4 (fix): a mere MENTION of an institution ("কাল বিকাশে টাকা পাঠাবো") is
+// not impersonation. The detector now requires a claimed-identity context
+// near the institution name (আমি/টিম/থেকে/এজেন্ট...).
+const IDENTITY_CLAIMS = RX([
+  "আমি", "আমরা", "ইনি", "এই\\s*আমি", "টিম", "থেকে(?:\\s*এসেছি|\\s*পাঠানো)?",
+  "পক্ষ(?: থেকে| হইতে)?", "এজেন্ট", "স্টাফ", "প্রতিনিধি", "অফিসার", "ম্যানেজার",
+  "বলছি", "বলছে", "বল(?:ে|া)\\s*হচ্ছে", "হতে\\s*পাঠানো", "সাইড\\s*থেকে",
+  "i\\s*am", "we\\s*are", "calling\\s*from", "on\\s*behalf", "\\bteam\\b", "\\bagent\\b", "\\bofficer\\b",
+  "theke\\s*bolchi", "ami\\s*bolchi", "head\\s*office", "হেড\\s*অফিস(?:ে)?",
+  "(?:dear|প্রিয়)\\s*(?:valued\\s*)?(?:customer|গ্রাহক)",
+]);
+
+// V4 (fix): "বৃত্তি পরীক্ষার নোটিশ" is a legitimate school notice. The
+// scholarship lure must appear with application/fee/winner context.
+const SCHOLARSHIP_CONTEXT = RX([
+  "আবেদন", "ফরম", "ফি", "অগ্রিম", "টাকা", "জমা", "লিংক", "ক্লিক", "যোগাযোগ",
+  "বিজয়ী", "পেয়েছেন", "কনফার্ম", "রেজিস্ট্রেশন", "apply", "\\bfee\\b", "\\blink\\b",
+  "winner", "won", "deposit", "\\bcash\\b",
 ]);
 
 const THREAT_WORDS = RX([
@@ -80,20 +122,88 @@ const THREAT_WORDS = RX([
   "নম্বর\\s*বন্ধ", "ওয়ারেন্ট", "গুম", "নাম\\s*কেটে\\s*দেওয়া", "অভিযোগ\\s*দেওয়া\\s*হবে",
   "আটক\\s*করা\\s*হবে", "legal\\s*action", "arrest", "warrant", "case\\s*against",
   "number\\s*will\\s*be\\s*(?:blocked|closed)", "তোমাকে\\s*গ্রেপ্তার", "আপনাকে\\s*গ্রেপ্তার",
+  // V4: sextortion — recorded/private-video blackmail
+  "hacked\\s+(?:your|the)", "recorded\\s+(?:private|your|videos)", "private\\s+video",
+  "send\\s+everything", "will\\s+send\\s+(?:everything|this|it)", "সবাইকে\\s*পাঠিয়ে",
+  "সব\\s*পরিবারকে", "sobaike?\\s*(?:pathiye|pathabo|pathi)", "sob\\s*family", "viral\\s*(?:kor|kore)",
+  "ভাইরাল\\s*(?:কর|হবে)", "ফাঁস\\s*কর(?:ে|ব)",
 ]);
 
 const MONEY_WORDS = RX([
   "send\\s*money", "ক্যাশ\\s*আউট", "উত্তোলন", "টাকা\\s*পাঠান", "টাকা\\s*দিন",
-  "পার্সোনাল\\s*নম্বর", "personal\\s*number", "নম্বর\\s*মোবাইল\\s*রিচার্জ",
-  "মোবাইল\\s*রিচার্জ", "পেমেন্ট\\s*কর", "pay\\s*(?:now|us|the)", "টাকা\\s*লাগবে",
+  "পার্সোনাল\\s*(?:নম্বর|নাম্বার)", "personal\\s*number",
+  "(?:নম্বর|নাম্বার)\\s*মোবাইল\\s*রিচার্জ", "মোবাইল\\s*রিচার্জ",
+  "\\bরিচার্জ\\s*(?:কর|দাও|দিন)", "(?:নম্বর|নাম্বারে)\\s*রিচার্জ", "টাকা\\s*রিচার্জ",
+  "পেমেন্ট\\s*কর", "pay\\s*(?:now|us|the)", "টাকা\\s*লাগবে",
   "অ্যাডভান্স", "advance\\s*(?:payment|fee)", "সেন্ড\\s*মানি", "ক্যাশ\\s*আউট\\s*কর",
-  "টাকা\\s*পাঠাও", "টাকা\\s*পাঠিয়ে\\s*দাও", // V3: informal (family-style) imperatives
+  "টাকা\\s*পাঠাও", "টাকা\\s*পাঠিয়ে\\s*দাও",
+  "টাকা\\s*পাঠানো\\s*হবে", "(?:নম্বর|নাম্বারে)\\s*টাকা\\s*পাঠান",
+  "টাকা\\s*(?:বিকাশ|নগদ|রকেট|উপায়)\\s*কর", "(?:বিকাশ|নগদ|রকেট)\\s*কর(?:ুন|ন|ও|ে\\s*দাও)",
+  "টাকা\\s*লেনদেন", "(\\d{3,})\\s*টাকা\\s*(?:বিকাশ|নগদ|পাঠান|দিন)",
+  "taka\\s*patha(?:o|n|ben|iyen)", "hazar\\s*taka", "hajar\\s*taka", "taka\\s*dao",
+  "(?:send|pay)\\s*[\\d,]{3,}\\s*(?:taka|tk)", "\\d{3,}\\s*(?:taka|tk)\\s*patha",
+]);
+
+// V4: classic cash-out scam phrasing — a STRANGER asking you to cash out to
+// their "personal number" is nearly always a misappropriation attempt.
+const CASHOUT_WORDS = RX([
+  "ক্যাশ\\s*আউট\\s*করে\\s*দ(?:িন|াও|েন)",
+  "পার্সোনাল\\s*(?:নম্বর|নাম্বারে)\\s*ক্যাশ\\s*আউট",
+  "আমার\\s*(?:নম্বর|নাম্বারে)\\s*ক্যাশ\\s*আউট",
+  "নিজের\\s*(?:নম্বর|নাম্বার)\\s*থেকে\\s*ক্যাশ\\s*আউট",
+]);
+
+// V4: guaranteed / multiplied-return promises (investment fraud hallmark).
+const RETURN_WORDS = RX([
+  "দ্বিগুণ", "তিন\\s*গুণ", "ডাবল\\s*(?:হবে|রিটার্ন|মানি)", "দ্বিগুণ\\s*ফেরত",
+  "গ্যারান্টি", "guaranteed", "নিশ্চিত\\s*(?:লাভ|ফেরত)", "হাল\\s*হাল\\s*মুনাফা",
+  "লাভ\\s*নিশ্চিত", "প্রতিদিন\\s*ইনকাম",
+]);
+
+// V4: "claim your prize" contact instructions — prize + contact = classic.
+const CONTACT_WORDS = RX([
+  "(?:কল|ফোন)\\s*কর(?:ুন|ন|তে)\\s*হবে", "এই\\s*(?:নম্বর|নাম্বারে)\\s*(?:কল|ফোন)",
+  "এসএমএস\\s*কর(?:ুন|ন)", "এস\\.?এম\\.?এস", "sms\\s*(?:now|us)", "whatsapp\\s*কর",
+  "টেলিগ্রাম", "telegram", "click\\s+(?:this|the)\\s+link", "এই\\s*লিংকে\\s*ক্লিক",
+  "লিংকে\\s*(?:ক্লিক|গিয়ে)", "যোগাযোগ\\s*কর(?:ুন|ন)", "call\\s*(?:now|this)",
+  "(?:নম্বর|নাম্বার)(?:ে|তে)?\\s*(?:কল|মেসেজ|এসএমএস)",
+  "নম্বর(?:ে|তে)\\s*(?:কল|ফোন)",
+]);
+
+// V4: 419 / inheritance scams — war widow, deceased husband, dollar transfer.
+const INHERITANCE_WORDS = RX([
+  "বিধবা", "উত্তরাধিকার", "মৃত\\s*(?:স্বামী|স্ত্রী|পিতা)", "মৃত\\s*স্বামীর",
+  "মিলিয়ন\\s*(?:ডলার|ডালার|dollar)", "million\\s*dollar", "war\\s*widow",
+  "ডলার\\s*(?:ট্রান্সফার|পাঠাতে)", "ডলার\\s*আপনার", "উইল\\s*করে", "unclaimed\\s*fund",
+  "অসুরক্ষিত\\s*তহবিল",
+]);
+
+// V4: referral / bonus-app income lures (ponzi-app sign-up scams).
+const REFERRAL_WORDS = RX([
+  "রেফার", "referral", "বোনাস", "bonus", "ফ্রেন্ড\\s*আন(?:লে|লেই)",
+  "ইনভাইট\\s*কর(?:লে|লেই)", "sign\\s*up\\s*bonus", "রেজিস্টার\\s*কর(?:লে|লেই)",
+  "সাইন\\s*আপ\\s*কর(?:লে|লেই)", "প্রতি\\s*রেফারে", "ক্যাশব্যাক\\s*পাবেন",
+  "ফরওয়ার্ড\\s*কর(?:ুন|ন)", "forward\\s*(?:this|to)", "ফ্রেন্ডকে",
+]);
+
+// V4: income-claim words used together with referral/job lures.
+const INCOME_WORDS = RX([
+  "ইনকাম", "আয়\\s*কর", "প্রতিদিন\\s*(?:টাকা|income)", "ক্যাশব্যাক", "cashback",
+  "earning", "ঘরে\\s*বসে", "বসে\\s*বসে", "লাইক\\s*কর(?:লে|ে)", "ভিডিও\\s*দেখ(?:লে|ে)",
+  "captcha\\s*ফিল", "মাসে\\s*\\d+\\s*হাজার",
+]);
+
+// V4: matrimony scams — bogus bride/groom listings that ask for fees.
+const MATRIMONY_WORDS = RX([
+  "রকম\\s*হয়েছে", "রকম\\s*হইছে", "বিয়ের\\s*জন্য", "পাত্র\\s*দেখ", "পাত্রী\\s*দেখ",
+  "বিয়ের\\s*প্রস্তাব", "মুরুব্বি\\s*দেখা", "matrimony",
 ]);
 
 const PRIZE_WORDS = RX([
   "লটারি", "জিতেছেন", "জিতে\\s*গেছেন", "বিজয়ী", "পুরস্কার", "প্রাইজ", "lottery",
   "you\\s*(?:have\\s*)?won", "prize", "winner", "ক্যাশব্যাক\\s*জিতে", "gift\\s*পেয়েছেন",
   "বোনাস\\s*পেয়েছেন", "কুপন\\s*জিতেছেন", "লাকি\\s*ড্র", "lucky\\s*draw",
+  "নির্বাচিত\\s*হয়েছে", "ভাউচার", "voucher", "নির্বাচিত", "selected",
 ]);
 
 const FEE_WORDS = RX([
@@ -108,6 +218,11 @@ const JOB_WORDS = RX([
   "form\\s*filling", "ফর্ম\\s*ফিল", "বেতন\\s*মাসে", "salary", "লাইভ\\s*চাকরি", "ভাইসা\\s*চাকরি",
   "ভিসা\\s*চাকরি", "বিদেশে\\s*চাকরি", "দুবাই\\s*চাকরি", "সৌদি\\s*চাকরি", "মালয়েশিয়া\\s*চাকরি",
   "work\\s*permit", "ওয়ার্ক\\s*পার্মিট", "বিদেশযাত্রা", "ভিসা\\s*ফি",
+  "ঘরে\\s*বসে", "অনলাইন(?:ে)?\\s*বসে", "পার্ট\\s*টাইম", "part[\\s-]?time", "অনলাইন\\s*ইনকাম",
+  "লাইক\\s*কর(?:লে|ে)", "ভিডিও\\s*দেখ(?:লে|ে)", "captcha", "ক্যাপচা",
+  "মাসে\\s*\\d+\\s*হাজার", "বেতন\\s*\\d+\\s*হাজার", "সাইন\\s*আপ\\s*বোনাস",
+  "work\\s*from\\s*home", "online\\s*job", "job\\s*opportunit", "online\\s*income",
+  "liking\\s+(?:youtube|facebook|tiktok)", "daily\\s*\\d+\\s*(?:taka|\\$)", "earn\\s+\\d",
 ]);
 
 // V3: scholarship / education fraud
@@ -147,7 +262,7 @@ const KINSHIP_ADDRESS = RX([
   "মামা", "চাচা", "চাচী", "খালা", "খালু", "ফুফু", "ভাবী", "শালি", "ননদ",
   "ছেলে", "মেয়ে", "বেটা", "বেটি", "son", "mom", "mum", "mother", "dad", "father", "brother", "sister",
   // Banglish (romanized) kinship
-  "\\bmama\\b", "\\babbu\\b", "\\bammu\\b", "\\bbhai\\b", "\\bbhaiya\\b", "\\bapu\\b", "\\bdidi\\b",
+  "\\bmama\\b", "\\babbu\\b", "\\bammu\\b", "\\bamma\\b", "\\bbhai\\b", "\\bbhaiya\\b", "\\bapu\\b", "\\bdidi\\b",
   "\\bchacha\\b", "\\bbaba\\b", "\\bmaa\\b", "\\bchele\\b", "\\bmeye\\b",
 ]);
 
@@ -239,6 +354,7 @@ const SHORTENERS = [
 const BRAND_TOKENS = [
   "bkash", "nagad", "rocket", "dbbl", "bangladeshbank", "police", "btrc", "sonali",
   "janata", "agrani", "rupali", "islamibank", "bracbank", "citybank",
+  "ebl", "easternbank", "teletalk", "trustbank", "mtb", "ucb", "primebank",
 ];
 
 const OFFICIAL_DOMAINS = [
@@ -251,7 +367,7 @@ const CRED_WORDS_IN_PATH = RX([
   "password", "confirm", "secure", "auth", "wallet", "unlimited", "gift", "reward", "claim",
 ]);
 
-const SUSPICIOUS_TLDS = ["xyz", "top", "club", "online", "site", "buzz", "icu", "cfd", "rest", "shop"];
+const SUSPICIOUS_TLDS = ["xyz", "top", "club", "online", "site", "buzz", "icu", "cfd", "rest", "shop", "win", "live", "click", "space", "website"];
 
 export interface UrlAssessment {
   input: string;
@@ -406,6 +522,17 @@ function sentences(text: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+/** V4 (fix): raw (untrimmed) split segments so index math stays exact. */
+function sentenceSegments(text: string): { start: number; end: number; raw: string; trimmed: string }[] {
+  const segs: { start: number; end: number; raw: string; trimmed: string }[] = [];
+  let acc = 0;
+  for (const raw of text.split(/(?<=[\u0964.!?\n])/)) {
+    segs.push({ start: acc, end: acc + raw.length, raw, trimmed: raw.trim() });
+    acc += raw.length;
+  }
+  return segs;
+}
+
 /**
  * Negation guard (V3): does the sentence containing `matchIndex` carry
  * advisory/negation framing? A message ADVISING someone never to share an
@@ -416,16 +543,13 @@ function sentences(text: string): string[] {
  */
 function isAdvisorySentence(text: string, matchIndex: number, matchLength: number, advisoryRx?: RegExp): boolean {
   const rx = advisoryRx ?? ADVISORY_FRAMING;
-  // find the sentence containing the match
-  let acc = 0;
-  for (const s of sentences(text)) {
-    const start = acc;
-    const end = acc + s.length;
-    if (matchIndex >= start && matchIndex < end + 1) {
-      return rx.test(s);
+  // V4 (fix): position math now uses raw (untrimmed) segments — the old
+  // implementation trimmed sentences, drifting indices and silently breaking
+  // the guard on multi-sentence messages.
+  for (const seg of sentenceSegments(text)) {
+    if (matchIndex >= seg.start && matchIndex <= seg.end) {
+      if (seg.trimmed.length > 0 && rx.test(seg.trimmed)) return true;
     }
-    acc = end;
-    if (acc > matchIndex) break;
   }
   // fallback: window around the match
   const win = text.slice(Math.max(0, matchIndex - 120), matchIndex + matchLength + 120);
@@ -467,6 +591,8 @@ const DETECTORS: DetectorDef[] = [
     pattern: URGENCY_WORDS,
     tactic: "urgency",
     weight: "moderate",
+    // V4: guarded — advisories say "report immediately", which is education.
+    negationGuarded: true,
     interpretation: {
       bn: "অতিরিক্ত তাড়াহুড়ো বা চাপ তৈরি করা হয়েছে — ভুয়া সনাক্তকরণের সময় না দিয়ে দ্রুত সিদ্ধান্ত নিতে বাধ্য করার কৌশল।",
       en: "Extreme urgency or pressure — a tactic to force a quick decision before you can verify.",
@@ -474,7 +600,8 @@ const DETECTORS: DetectorDef[] = [
   },
   {
     id: "impersonation",
-    pattern: OFFICIAL_NAMES,
+    // V4: institution + claimed-identity context (mere mentions excluded).
+    pattern: combineNear(OFFICIAL_NAMES, IDENTITY_CLAIMS, 60),
     tactic: "impersonation",
     weight: "strong",
     // V3 speaker-identity guard: an advisory ABOUT an institution
@@ -507,6 +634,13 @@ const DETECTORS: DetectorDef[] = [
     pattern: MONEY_WORDS,
     tactic: "money_request",
     weight: "strong",
+    // V4: guarded — legitimate bill reminders say "pay yourself in the app".
+    negationGuarded: true,
+    advisoryRx: RX([
+      "নিজে\\s*(?:অ্যাপ|এপ|অ্যাপে|এপে|থেকে)", "শেষ\\s*তারিখ", "বিল\\s*পরিশোধ", "due\\s*date",
+      "bill\\s*(?:is\\s*)?due", "বিদ্যুৎ\\s*বিল", "গ্যাস\\s*বিল", "পানি\\s*বিল", "ইন্টারনেট\\s*বিল",
+      "autopay", "স্বয়ংক্রিয়", "রিকারিং", "installment\\s*due", "কিস্তি",
+    ]),
     interpretation: {
       bn: "টাকা পাঠানোর অনুরোধ করা হয়েছে — বিশেষত কারও 'পার্সোনাল নম্বর' পাঠানোর বার্তা সর্বদা সন্দেহজনক।",
       en: "A money transfer is requested — especially to a 'personal number', which is always suspicious.",
@@ -520,6 +654,8 @@ const DETECTORS: DetectorDef[] = [
     pattern: PRIZE_WORDS,
     tactic: "false_reward",
     weight: "strong",
+    // V4: guarded — quoted-scam education mentions lottery/prize words.
+    negationGuarded: true,
     interpretation: {
       bn: "অযাচিত পুরস্কার/লটারি জেতার দাবি — যারা প্রতিযোগিতায় অংশ নেননি, তাদের 'জেতা' প্রায় সবসময়ই প্রতারণা।",
       en: "Unsolicited prize/lottery claims — if you never entered, 'winning' is almost always a scam.",
@@ -540,7 +676,8 @@ const DETECTORS: DetectorDef[] = [
   },
   {
     id: "scholarship",
-    pattern: SCHOLARSHIP_WORDS,
+    // V4: scholarship + application/fee/winner context (school notices excluded).
+    pattern: combineNear(SCHOLARSHIP_WORDS, SCHOLARSHIP_CONTEXT, 70),
     tactic: "scholarship_lure",
     weight: "moderate",
     interpretation: {
@@ -647,6 +784,14 @@ const DETECTORS: DetectorDef[] = [
   {
     id: "parcel",
     pattern: PARCEL_WORDS,
+    // V4: guarded — genuine courier/delivery notifications are common.
+    negationGuarded: true,
+    advisoryRx: RX([
+      "out\\s*for\\s*delivery", "আউট\\s*ফর\\s*ডেলিভারি", "পৌঁছে\\s*দেওয়া\\s*হবে",
+      "will\\s*arrive", "ডেলিভারি\\s*ম্যান\\s*আসার\\s*আগে", "courier\\s*will\\s*call",
+      "অর্ডার\\s*#", "order\\s*#", "has\\s*been\\s*shipped",
+      "ট্র্যাক\\s*কর", "track\\s*(?:your|the)", "delivery\\s*(?:is|will\\s*be)\\s*(?:scheduled|on)",
+    ]),
     tactic: "parcel_lure",
     weight: "moderate",
     interpretation: {
@@ -674,6 +819,72 @@ const DETECTORS: DetectorDef[] = [
       en: "An easy-loan offer — unverified 'instant loan' propositions are dangerous without verification.",
     },
   },
+  // ---- V4 detectors (Bangla-first scam coverage) ---------------------------
+  {
+    id: "cashout-request",
+    pattern: CASHOUT_WORDS,
+    tactic: "cashout_request",
+    weight: "strong",
+    interpretation: {
+      bn: "অচেনা কেউ নিজের 'পার্সোনাল নাম্বারে' ক্যাশ আউট করতে বলেছে — বাংলাদেশে এটি টাকা আত্মসাৎএর অন্যতম প্রধান কৌশল।",
+      en: "A stranger asks for a cash-out to their 'personal number' — one of the most common money-misappropriation tactics in Bangladesh.",
+    },
+    speaker: {
+      requestedAction: { bn: "নিজের নম্বরে ক্যাশ আউট চাওয়া", en: "Requesting a cash-out to their own number" },
+    },
+  },
+  {
+    id: "guaranteed-return",
+    pattern: RETURN_WORDS,
+    tactic: "guaranteed_return",
+    weight: "strong",
+    interpretation: {
+      bn: "নিশ্চিত/দ্বিগুণ লাভের প্রতিশ্রুতি — বৈধ বিনিয়োগে লাভ কখনো 'গ্যারান্টি' হয় না।",
+      en: "A guaranteed/doubled-return promise — legitimate investment returns are never 'guaranteed'.",
+    },
+  },
+  {
+    id: "contact-lure",
+    pattern: CONTACT_WORDS,
+    tactic: "contact_request",
+    weight: "moderate",
+    // V4: guarded — advisories legitimately say "call 999 / report now".
+    negationGuarded: true,
+    interpretation: {
+      bn: "যোগাযোগ করতে বলা হয়েছে (কল/এসএমএস/লিংকে ক্লিক) — পুরস্কার বা অফারের সাথে মিলে গেলে এটি প্রতারণার শক্ত লক্ষণ।",
+      en: "The message asks you to make contact (call/SMS/click a link) — combined with a prize or offer this is a strong scam signal.",
+    },
+  },
+  {
+    id: "inheritance",
+    pattern: INHERITANCE_WORDS,
+    tactic: "inheritance_lure",
+    weight: "strong",
+    interpretation: {
+      bn: "মৃত আত্মীয়ের সম্পদ/মিলিয়ন ডলার ট্রান্সফারের গল্প — এই 'উত্তরাধিকার' গল্প বিশ্বজুড়ে পরিচিত প্রতারণা।",
+      en: "A deceased relative's estate / million-dollar transfer story — this classic '419' inheritance tale is a globally known fraud.",
+    },
+  },
+  {
+    id: "referral-income",
+    pattern: REFERRAL_WORDS,
+    tactic: "referral_lure",
+    weight: "moderate",
+    interpretation: {
+      bn: "রেফার/বোনাসে ইনকামের প্রস্তাব — বেনামি অ্যাপে এ ধরনের 'পিরামিড' প্রস্তাব প্রায়ই প্রতারণা।",
+      en: "A referral/bonus income offer — such 'pyramid' offers on anonymous apps are frequently fraud.",
+    },
+  },
+  {
+    id: "matrimony",
+    pattern: MATRIMONY_WORDS,
+    tactic: "matrimony_lure",
+    weight: "moderate",
+    interpretation: {
+      bn: "বিয়ে/রকম সংক্রান্ত প্রস্তাব — অর্থ চেয়ে এমন প্রস্তাব দেওয়া হলে সেটি প্রতারণার প্রচলিত ধরন।",
+      en: "A marriage/matrimony proposal — when it asks for money it is a well-known scam pattern.",
+    },
+  },
 ];
 
 /** Build a regex that fires when two patterns occur within `window` chars of each other. */
@@ -694,6 +905,9 @@ function quoteAround(text: string, index: number, len: number): string {
 }
 
 export function detectScamIndicators(redactedText: string, rawUrl?: string, modality?: string): HeuristicResult {
+  // V4 (fix): NFC-normalize so decomposed keyboard input matches patterns
+  // regardless of ya-phala composition (see RX above).
+  redactedText = redactedText.normalize("NFC");
   const evidence: Evidence[] = [];
   let n = 1;
   const nextKey = () => `E${n++}`;
@@ -788,7 +1002,11 @@ export function detectScamIndicators(redactedText: string, rawUrl?: string, moda
     }
   } else {
     // Also scan for embedded URLs in text
-    const urlMatches = redactedText.match(/https?:\/\/[^\s]+|(?:^|\s)www\.[^\s]+/gi) || [];
+    // V4: bare domains (dbbl-atm.xyz) are scanned too — scam links usually
+    // arrive in SMS without any scheme prefix.
+    const urlMatches = redactedText.match(
+      /https?:\/\/[^\s]+|(?:^|\s)www\.[^\s]+|(?:^|\s)[a-z0-9][a-z0-9-]{1,30}\.(?:com|net|org|xyz|top|win|live|click|link|space|website|online|site|shop|buzz|icu|cfd|rest|club|info|pro|app)(?:\/[^\s]*)?/gi
+    ) || [];
     for (const u of urlMatches.slice(0, 3)) {
       const res = analyzeUrl(u.trim(), "");
       urlAssessment = urlAssessment ?? res.assessment;
@@ -853,6 +1071,13 @@ export function assessRisk(evidence: Evidence[], modality?: string): { riskCateg
   const shopping = has(evidence, "shopping_lure");
   const loan = has(evidence, "loan_lure");
   const urgency = has(evidence, "urgency");
+  const cashout = has(evidence, "cashout_request");
+  const guaranteedReturn = has(evidence, "guaranteed_return");
+  const contact = has(evidence, "contact_request");
+  const inheritance = has(evidence, "inheritance_lure");
+  const referral = has(evidence, "referral_lure");
+  const income = has(evidence, "referral_lure") && INCOME_WORDS.test(evidence.map((e) => e.quote).join(" "));
+  const matrimony = has(evidence, "matrimony_lure");
   const secrecy = evidence.some((e) => e.source === "heuristic:family-impersonation" && /গোপন|কাউকে\s*বল/i.test(e.interpretation.bn));
 
   // Family impersonation (optionally AI-voice flavored for the voice modality)
@@ -874,12 +1099,24 @@ export function assessRisk(evidence: Evidence[], modality?: string): { riskCateg
   if (investment && (money || fee)) return { riskCategory: "HIGH_RISK", scamCategory: "investment_fraud" };
   if (romance && (money || fee || investment)) return { riskCategory: "HIGH_RISK", scamCategory: "romance_scam" };
   if (lookalike) return { riskCategory: "HIGH_RISK", scamCategory: "phishing_link" };
+  if (linkRisk && (impersonation || contact)) return { riskCategory: "HIGH_RISK", scamCategory: "phishing_link" };
   if (money && (impersonation || urgency || secrecy)) return { riskCategory: "HIGH_RISK", scamCategory: "impersonation" };
   if (money && (parcel || fee)) return { riskCategory: "HIGH_RISK", scamCategory: "parcel_scam" };
   if (shopping && fee) return { riskCategory: "HIGH_RISK", scamCategory: "shopping_scam" };
   if (loan && fee) return { riskCategory: "HIGH_RISK", scamCategory: "loan_scam" };
+  // ---- V4 rules (verified against the 2026-11 Bangla scam corpus) ----
+  if (cashout) return { riskCategory: "HIGH_RISK", scamCategory: "cashout_scam" };
+  if (inheritance) return { riskCategory: "HIGH_RISK", scamCategory: "inheritance_scam" };
+  if (investment && (money || fee || guaranteedReturn)) return { riskCategory: "HIGH_RISK", scamCategory: "investment_fraud" };
+  if (prize && (contact || fee || impersonation)) return { riskCategory: "HIGH_RISK", scamCategory: "prize_lottery" };
+  if (parcel && (fee || money)) return { riskCategory: "HIGH_RISK", scamCategory: "parcel_scam" };
+  if (loan && /\u09ac\u09bf\u09a8\u09be\s*\u099c\u09be\u09ae\u09bf\u09a8\u09c7|\u09a4\u09be\u09ce\u0995\u09cd\u09b7\u09a3\u09bf\u0995|instant/i.test(evidence.map((e) => e.quote).join(" "))) return { riskCategory: "HIGH_RISK", scamCategory: "loan_scam" };
+  if (matrimony && (money || fee)) return { riskCategory: "HIGH_RISK", scamCategory: "matrimony_scam" };
+  if (referral && income) return { riskCategory: "HIGH_RISK", scamCategory: "referral_scam" };
+  if (job && (fee || guaranteedReturn || income)) return { riskCategory: "HIGH_RISK", scamCategory: "fake_job" };
 
   // Weaker combinations → CAUTION
+  if (matrimony || referral) return { riskCategory: "CAUTION", scamCategory: matrimony ? "matrimony_scam" : "referral_lure" };
   if (prize || (job && (scholarship || impersonation)) || scholarship) return { riskCategory: "CAUTION", scamCategory: prize ? "prize_lottery" : scholarship ? "scholarship_scam" : "fake_job" };
   if (investment || romance) return { riskCategory: "CAUTION", scamCategory: investment ? "investment_fraud" : "romance_scam" };
   if (money) return { riskCategory: "CAUTION", scamCategory: "uncertain_situation" };

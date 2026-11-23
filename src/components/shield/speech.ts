@@ -5,8 +5,9 @@
 //   1. Browser speechSynthesis with a GENUINE Bangla voice (bn-BD preferred,
 //      then bn-IN, then any bn-*) — device-native, offline, zero cost. This is
 //      the primary path on the public Vercel deployment.
-//   2. Server /api/v1/tts (the sandbox provider voice) — used when the device
-//      has no Bangla voice installed.
+//   2. Server /api/v1/tts (V9: genuine Bangla speech via Google Translate's
+//      bn voice, proxied server-side) — used when the device has no Bangla
+//      voice installed. The old ZAI sandbox voice could not speak Bangla.
 //   3. Failure — the caller keeps the written text available (never fake).
 // ---------------------------------------------------------------------------
 
@@ -94,7 +95,7 @@ export async function speakBangla(
     }
   }
 
-  // 2. Server TTS (sandbox provider; returns audio/wav).
+  // 2. Server TTS (V9: Google Translate bn voice; returns audio/mpeg).
   try {
     const { api } = await import("./api");
     const res = await api.postRaw("/api/v1/tts", { text: clean.slice(0, 1024), speed });

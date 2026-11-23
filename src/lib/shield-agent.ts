@@ -111,6 +111,9 @@ export async function chatWithShieldAgent(
       ...history,
     ],
     modelOverride,
+    // V9: cap generations at ~700 tokens (prompt says <=200 words) — keeps
+    // replies fast instead of letting the model ramble for 40s.
+    maxTokens: 700,
   });
 
   if (result.ok && result.text) {

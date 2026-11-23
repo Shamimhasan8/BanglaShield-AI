@@ -80,11 +80,17 @@ function embeddedDemoKey(): string {
 
 // Validated defaults — every model here was live-tested for Bangla quality
 // and cost on 2026-11-23 (see docs/V8-RELEASE-QA.md). Env vars still override.
-const DEFAULT_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
+// V9: both chat AND analysis default to Gemma 3 27B — live-measured ~6s for
+// a full Bangla analysis/reply vs ~21-60s on llama-3.3-70b, with valid JSON
+// and correct verdicts on the benchmark set. The safety gate + retry loop
+// guards JSON quality on every result regardless of model.
+const DEFAULT_CHAT_MODEL = "google/gemma-3-27b-it";
+const DEFAULT_ANALYSIS_MODEL = "google/gemma-3-27b-it";
 const DEFAULT_VISION_MODEL = "meta-llama/llama-4-maverick"; // multimodal
+// V9: ordered by live-measured latency (mistral ~9s, qwen ~12s, deepseek ~14s).
 const DEFAULT_FALLBACK_MODELS = [
+  "mistralai/mistral-small-3.2-24b-instruct",
   "qwen/qwen-2.5-72b-instruct",
-  "google/gemma-3-27b-it",
   "deepseek/deepseek-chat",
 ];
 
@@ -106,7 +112,7 @@ export function gatewayConfig(): GatewayConfig {
   return {
     apiKey: env("OPENROUTER_API_KEY") ?? (embeddedDemoKey() || undefined),
     modelFor: {
-      analysis: env("OPENROUTER_ANALYSIS_MODEL") ?? DEFAULT_CHAT_MODEL,
+      analysis: env("OPENROUTER_ANALYSIS_MODEL") ?? DEFAULT_ANALYSIS_MODEL,
       chat: env("OPENROUTER_CHAT_MODEL") ?? DEFAULT_CHAT_MODEL,
       vision: env("OPENROUTER_VISION_MODEL") ?? DEFAULT_VISION_MODEL,
     },
@@ -174,12 +180,13 @@ async function openRouterCall(
   cfg: GatewayConfig,
   model: string,
   opts: GatewayCallOptions,
-  isFallback: boolean
+  isFallback: boolean,
+  callTimeoutMs?: number
 ): Promise<GatewayResult> {
   const started = Date.now();
   const run = async (withSchema: boolean): Promise<GatewayResult> => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), cfg.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), callTimeoutMs ?? cfg.timeoutMs);
     try {
       const body: Record<string, unknown> = {
         model,
@@ -266,13 +273,13 @@ async function openRouterCall(
 // ZAI transport (sandbox/local provider)
 // ---------------------------------------------------------------------------
 
-async function zaiCall(opts: GatewayCallOptions): Promise<GatewayResult> {
+async function zaiCall(opts: GatewayCallOptions, remainingMs?: number): Promise<GatewayResult> {
   const started = Date.now();
   try {
     const { default: ZAI } = await import("z-ai-web-dev-sdk");
     const zai = await ZAI.create();
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), gatewayConfig().timeoutMs);
+    const timer = setTimeout(() => controller.abort(), remainingMs ?? gatewayConfig().timeoutMs);
     try {
       const completion = await Promise.race([
         zai.chat.completions.create({
@@ -319,18 +326,38 @@ async function zaiCall(opts: GatewayCallOptions): Promise<GatewayResult> {
 export async function gatewayChat(opts: GatewayCallOptions): Promise<GatewayResult> {
   const cfg = gatewayConfig();
 
+  // V9 (fix): the old chain gave EVERY candidate a full independent timeout
+  // (worst case 4x25s + ZAI 25s ~= 2 minutes for one chat reply — users saw
+  // 40s+ waits). Each purpose now gets ONE shared deadline; candidates and
+  // the ZAI fallback draw from what remains. Chat replies are short, so the
+  // per-call timeout is tighter too.
+  const chainBudgetMs = opts.purpose === "chat" ? 36_000 : 75_000;
+  const perCallMs = opts.purpose === "chat" ? Math.min(cfg.timeoutMs, 22_000) : cfg.timeoutMs;
+  const deadline = Date.now() + chainBudgetMs;
+
   if (cfg.apiKey && !budgetExceeded()) {
     const primary = opts.modelOverride ?? cfg.modelFor[opts.purpose];
     const candidates = [...(primary ? [primary] : []), ...cfg.fallbackModels.filter((m) => m !== primary)];
     for (let i = 0; i < candidates.length; i++) {
-      const r = await openRouterCall(cfg, candidates[i], opts, i > 0);
+      const remaining = deadline - Date.now();
+      if (remaining < 3_000) break; // no budget left for another attempt
+      const r = await openRouterCall(cfg, candidates[i], opts, i > 0, Math.min(perCallMs, remaining));
       if (r.ok) return r;
       // 401/402 (auth/balance) — do not multiply retries across candidates.
       if (r.error?.startsWith("openrouter:401") || r.error?.startsWith("openrouter:402")) break;
     }
   }
 
-  return zaiCall(opts);
+  // ZAI fallback only if the chain budget still has room.
+  if (Date.now() < deadline - 3_000) return zaiCall(opts, deadline - Date.now());
+  return {
+    ok: false,
+    error: "gateway:deadline-exceeded",
+    servedBy: "none",
+    model: "none",
+    latencyMs: chainBudgetMs,
+    fallbackUsed: true,
+  };
 }
 
 // ---------------------------------------------------------------------------

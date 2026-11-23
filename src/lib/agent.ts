@@ -82,7 +82,7 @@ export interface AgentOutcome {
 }
 
 /** JSON Schema for gateway structured outputs (safety-gate revalidates). */
-const ANALYSIS_JSON_SCHEMA: Record<string, unknown> = {
+export const ANALYSIS_JSON_SCHEMA: Record<string, unknown> = {
   type: "object",
   required: ["riskCategory", "scamCategory", "summary", "why", "recommendations"],
   properties: {
@@ -204,6 +204,9 @@ Respond with the JSON object only.`;
       { role: "user", content: userContent },
     ],
     jsonSchema: ANALYSIS_JSON_SCHEMA,
+    // V9: cap generations (~1300 tokens covers the full schema payload) —
+    // live-measured to cut analysis latency from ~40s to ~13s on the default.
+    maxTokens: 1300,
   });
 
   if (!result.ok || !result.text) {
