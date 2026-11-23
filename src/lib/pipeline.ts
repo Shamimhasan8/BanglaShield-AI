@@ -19,6 +19,7 @@
 
 import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
+import { waitUntil } from "@vercel/functions";
 import { db } from "@/lib/db";
 import { redactPII } from "@/lib/redact";
 import { detectScamIndicators } from "@/lib/heuristics";
@@ -392,7 +393,7 @@ export function runPipelineInBackground(args: RunPipelineArgs): void {
     ...(args.visualNotes ? { visualNotes: args.visualNotes } : {}),
     ...(args.demo !== undefined ? { demo: args.demo } : {}),
   };
-  void (async () => {
+  const task = (async () => {
     try {
       const claim = await db.analysisSession.updateMany({
         where: { id: args.sessionId, deletedAt: null, status: { in: ["awaiting_input", "awaiting_review"] } },
@@ -439,6 +440,17 @@ export function runPipelineInBackground(args: RunPipelineArgs): void {
       running.delete(args.sessionId);
     }
   })();
+
+  // Serverless keep-alive (V8): on Vercel the function would otherwise freeze
+  // the moment the HTTP response is sent, suspending this background work
+  // mid-flight (clients saw "processing" forever). waitUntil() keeps the
+  // invocation alive until the pipeline settles. Outside Vercel it is a
+  // graceful no-op and the promise runs as plain fire-and-forget.
+  try {
+    waitUntil(task);
+  } catch {
+    /* not in a Vercel context — the promise is already running */
+  }
 }
 
 /**
