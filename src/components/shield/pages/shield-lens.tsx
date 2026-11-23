@@ -106,9 +106,9 @@ export default function ShieldLensPage({ caseId }: { caseId: string }) {
     return (
       <div className="mx-auto max-w-xl px-4 py-16 text-center">
         <p className="text-lg font-bold text-[#202C26] bn-text">{error}</p>
-        <Link to="/check" className="mt-4 inline-block">
-          <Button className="bg-[#2F5746] text-[#FFFEFA]">{bn ? "নতুন যাচাই" : "New check"}</Button>
-        </Link>
+        <Button asChild className="bg-[#2F5746] text-[#FFFEFA]">
+          <Link to="/check" className="mt-4 inline-block">{bn ? "নতুন যাচাই" : "New check"}</Link>
+        </Button>
       </div>
     );
   }
@@ -133,9 +133,9 @@ export default function ShieldLensPage({ caseId }: { caseId: string }) {
             <p className="text-[#59665F] bn-text">
               {bn ? "বিশ্লেষণ সম্পন্ন হলে এখানে সময়রেখা দেখা যাবে।" : "Once the analysis completes, the timeline appears here."}
             </p>
-            <Link to={`/analysis/${caseId}`}>
-              <Button className="bg-[#2F5746] text-[#FFFEFA]">{bn ? "ফলাফল দেখুন" : "View result"}</Button>
-            </Link>
+            <Button asChild className="bg-[#2F5746] text-[#FFFEFA]">
+              <Link to={`/analysis/${caseId}`}>{bn ? "ফলাফল দেখুন" : "View result"}</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -175,11 +175,9 @@ export default function ShieldLensPage({ caseId }: { caseId: string }) {
             {listMode ? <LayoutGrid className="h-4 w-4" aria-hidden /> : <List className="h-4 w-4" aria-hidden />}
             {listMode ? (bn ? "সময়রেখা দেখুন" : "Timeline view") : bn ? "লেখা-তালিকা দেখুন" : "Text list view"}
           </Button>
-          <Link to={`/analysis/${caseId}`}>
-            <Button variant="outline" size="sm" className="border-[#D8DED5] text-[#59665F] gap-1.5">
-              {bn ? "ফলাফলে ফিরুন" : "Back to result"}
-            </Button>
-          </Link>
+          <Button asChild variant="outline" size="sm" className="border-[#D8DED5] text-[#59665F] gap-1.5">
+            <Link to={`/analysis/${caseId}`}>{bn ? "ফলাফলে ফিরুন" : "Back to result"}</Link>
+          </Button>
         </div>
       </div>
 
@@ -410,18 +408,18 @@ export default function ShieldLensPage({ caseId }: { caseId: string }) {
             {/* next step link at end */}
             {idx === stages.length - 1 && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-5 flex flex-wrap gap-3">
-                <Link to={`/analysis/${caseId}`}>
-                  <Button className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A] gap-2 font-bold">
+                <Button asChild className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A] gap-2 font-bold">
+                  <Link to={`/analysis/${caseId}`}>
                     <ShieldCheck className="h-4 w-4" aria-hidden />
                     {bn ? "সুপারিশকৃত পদক্ষেপ দেখুন" : "See recommended actions"}
-                  </Button>
-                </Link>
-                <Link to={`/report?case=${caseId}`}>
-                  <Button variant="outline" className="border-[#2F5746]/50 text-[#2F5746] hover:bg-[#DDE8DF] gap-2 font-bold">
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="border-[#2F5746]/50 text-[#2F5746] hover:bg-[#DDE8DF] gap-2 font-bold">
+                  <Link to={`/report?case=${caseId}`}>
                     {bn ? "অন্যদের বাঁচাতে রিপোর্ট করুন" : "Report to protect others"}
                     <ArrowRight className="h-4 w-4" aria-hidden />
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
               </motion.div>
             )}
           </div>

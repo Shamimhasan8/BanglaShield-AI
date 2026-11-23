@@ -116,6 +116,10 @@ model Report {
   synthetic       Boolean       @default(false) // clearly-labeled demonstration seed data
   title           String? // moderator-approved alert headline
   alertBody       String? // moderator-approved public alert body (bn)
+  // F-03 fix (V8): sha256 of the one-time withdrawal receipt token shown to
+  // the submitter. Withdrawal requires this token (or member authorship) —
+  // the public reference id alone can never withdraw a report.
+  withdrawTokenHash String?
   submittedAt     DateTime      @default(now())
   reviewedAt      DateTime?
   publishedAt     DateTime?

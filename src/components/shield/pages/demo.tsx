@@ -135,12 +135,12 @@ export default function DemoPage() {
                   {p.audioSrc && (
                     <audio controls src={p.audioSrc} className="h-9 flex-1 min-w-0" aria-label={bn ? "নমুনা কণ্ঠ শুনুন" : "Listen to the sample"} />
                   )}
-                  <Link to={`/check/${MODALITY_TAB[p.modality]}?demo=${p.id}`} className="shrink-0">
-                    <Button className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A] gap-2 font-bold">
+                  <Button asChild className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A] gap-2 font-bold">
+                    <Link to={`/check/${MODALITY_TAB[p.modality]}?demo=${p.id}`} className="shrink-0">
                       <Play className="h-4 w-4" aria-hidden />
                       {bn ? "চালান" : "Run"}
-                    </Button>
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </CardContent>
             </Card>

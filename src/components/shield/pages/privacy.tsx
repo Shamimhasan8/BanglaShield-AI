@@ -277,11 +277,9 @@ export default function PrivacyPage({ tab }: { tab: string }) {
                         {s.riskCategory && <span className="mt-1 inline-block"><RiskBadge risk={s.riskCategory} size="sm" /></span>}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <Link to={`/analysis/${s.id}`}>
-                          <Button variant="outline" size="sm" className="border-[#D8DED5] text-[#2F5746] h-8">
-                            {bn ? "দেখুন" : "View"}
-                          </Button>
-                        </Link>
+                        <Button asChild variant="outline" size="sm" className="border-[#D8DED5] text-[#2F5746] h-8">
+                          <Link to={`/analysis/${s.id}`}>{bn ? "দেখুন" : "View"}</Link>
+                        </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="outline" size="icon" className="h-8 w-8 border-[#A44435]/40 text-[#A44435] hover:bg-[#F4E1DA]" aria-label={bn ? "মুছুন" : "Delete"}>

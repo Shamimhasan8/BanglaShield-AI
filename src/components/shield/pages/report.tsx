@@ -40,12 +40,15 @@ export default function ReportPage({ initialCase, embedded = false }: { initialC
   const [consent, setConsent] = useState(false);
   const [contactConsent, setContactConsent] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<{ id: string } | null>(null);
+  const [result, setResult] = useState<{ id: string; withdrawToken: string } | null>(null);
 
   // withdrawal lookup
   const [lookupId, setLookupId] = useState("");
   const [found, setFound] = useState<{ id: string; status: string; submittedAt: string } | null>(null);
   const [lookupBusy, setLookupBusy] = useState(false);
+  const [withdrawToken, setWithdrawToken] = useState("");
+  const [withdrawBusy, setWithdrawBusy] = useState(false);
+  const [withdrawError, setWithdrawError] = useState("");
 
   const submit = async () => {
     if (!category || content.trim().length < 10 || !consent) {
@@ -54,15 +57,15 @@ export default function ReportPage({ initialCase, embedded = false }: { initialC
     }
     setBusy(true);
     try {
-      const res = await api.post<{ id: string }>("/api/v1/reports", {
+      const res = await api.post<{ id: string; withdrawToken: string }>("/api/v1/reports", {
         category,
         content,
         consentReport: true,
         consentContact: contactConsent,
         ...(caseId.trim() ? { sessionId: caseId.trim().toUpperCase() } : {}),
       });
-      setResult({ id: res.id });
-      toast.success(bn ? "রিপোর্ট জমা হয়েছে — ধন্যবাদ!" : "Report submitted — thank you!");
+      setResult({ id: res.id, withdrawToken: res.withdrawToken });
+      toast.success(bn ? "রিপোর্ট জমা হয়েছে — রশিদ-টোকেনটি এখনই সংরক্ষণ করুন!" : "Report submitted — save your receipt token now!");
     } catch (err) {
       toast.error(err instanceof ShieldApiError ? err.apiError.message : t("common.error"));
     } finally {
@@ -91,12 +94,24 @@ export default function ReportPage({ initialCase, embedded = false }: { initialC
 
   const withdraw = async () => {
     if (!found) return;
+    if (withdrawToken.trim().length < 8) {
+      setWithdrawError(
+        bn
+          ? "জমা দেওয়ার সময় পাওয়া রশিদ-টোকেনটি লিখুন — শুধু রেফারেন্স আইডি দিয়ে প্রত্যাহার করা যায় না (নিরাপত্তা নিয়ম)।"
+          : "Enter the receipt token you received at submission — a reference ID alone cannot withdraw a report (security rule)."
+      );
+      return;
+    }
+    setWithdrawBusy(true);
+    setWithdrawError("");
     try {
-      await api.del(`/api/v1/reports/${found.id}`);
+      await api.del(`/api/v1/reports/${found.id}?token=${encodeURIComponent(withdrawToken.trim())}`);
       toast.success(bn ? "রিপোর্টটি প্রত্যাহার করা হয়েছে" : "Report withdrawn");
       setFound({ ...found, status: "withdrawn" });
     } catch (err) {
-      toast.error(err instanceof ShieldApiError ? err.apiError.message : t("common.error"));
+      setWithdrawError(err instanceof ShieldApiError ? err.apiError.message : t("common.error"));
+    } finally {
+      setWithdrawBusy(false);
     }
   };
 
@@ -122,18 +137,36 @@ export default function ReportPage({ initialCase, embedded = false }: { initialC
           </Button>
         </div>
         {found && (
-          <div className="rounded-xl border border-[#D8DED5] bg-[#F4F1EB] p-4 flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p className="font-bold text-[#202C26]">{found.id}</p>
-              <p className="text-sm text-[#59665F]">
-                <StatusBadge status={found.status} />
-              </p>
+          <div className="rounded-xl border border-[#D8DED5] bg-[#F4F1EB] p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <p className="font-bold text-[#202C26]">{found.id}</p>
+                <p className="text-sm text-[#59665F]">
+                  <StatusBadge status={found.status} />
+                </p>
+              </div>
+              {found.status !== "withdrawn" && (
+                <Button onClick={withdraw} disabled={withdrawBusy} variant="outline" size="sm" className="border-[#A44435]/50 text-[#A44435] hover:bg-[#F4E1DA] gap-1.5">
+                  {withdrawBusy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Trash2 className="h-4 w-4" aria-hidden />} {bn ? "প্রত্যাহার করুন" : "Withdraw"}
+                </Button>
+              )}
             </div>
             {found.status !== "withdrawn" && (
-              <Button onClick={withdraw} variant="outline" size="sm" className="border-[#A44435]/50 text-[#A44435] hover:bg-[#F4E1DA] gap-1.5">
-                <Trash2 className="h-4 w-4" aria-hidden /> {bn ? "প্রত্যাহার করুন" : "Withdraw"}
-              </Button>
+              <div className="space-y-1.5">
+                <Label htmlFor="withdraw-token" className="text-xs font-semibold text-[#59665F] bn-text">
+                  {bn ? "প্রত্যাহারের রশিদ-টোকেন" : "Withdrawal receipt token"}
+                </Label>
+                <Input
+                  id="withdraw-token"
+                  value={withdrawToken}
+                  onChange={(e) => setWithdrawToken(e.target.value)}
+                  placeholder={bn ? "জমা দেওয়ার সময় পাওয়া টোকেন" : "token from your submission receipt"}
+                  className="bg-[#FFFEFA] border-[#D8DED5] focus-visible:ring-[#2F5746] font-mono text-sm"
+                  autoComplete="off"
+                />
+              </div>
             )}
+            {withdrawError && <p className="text-xs text-[#A44435] bn-text">{withdrawError}</p>}
           </div>
         )}
       </CardContent>
@@ -157,29 +190,43 @@ export default function ReportPage({ initialCase, embedded = false }: { initialC
                 ? "আপনার রিপোর্ট বেনামে সংরক্ষিত হয়েছে — কোনো নাম, নম্বর বা ব্যক্তিগত তথ্য ছাড়াই। বিশ্লেষকরা প্যাটার্ন যাচাই করে সম্প্রদায়কে সতর্ক করবেন।"
                 : "Your report is stored anonymously — no name, number, or personal data. Analysts verify patterns to alert the community."}
             </p>
-            <div className="rounded-xl border border-[#D8DED5] bg-[#F4F1EB] p-4">
-              <p className="text-xs text-[#59665F]">{bn ? "আপনার রেফারেন্স আইডি" : "Your reference ID"}</p>
-              <p className="text-2xl font-bold tracking-wider text-[#2F5746]">{result.id}</p>
-              <div className="mt-2 flex justify-center">
-                <CopyButton value={result.id} label={bn ? "কপি করুন" : "Copy"} />
+            <div className="rounded-xl border border-[#D8DED5] bg-[#F4F1EB] p-4 space-y-3">
+              <div>
+                <p className="text-xs text-[#59665F]">{bn ? "আপনার রেফারেন্স আইডি" : "Your reference ID"}</p>
+                <p className="text-2xl font-bold tracking-wider text-[#2F5746]">{result.id}</p>
+                <div className="mt-2 flex justify-center">
+                  <CopyButton value={result.id} label={bn ? "কপি করুন" : "Copy"} />
+                </div>
+              </div>
+              <div className="rounded-lg border-2 border-dashed border-[#8A5B28]/60 bg-[#F2E8D5]/60 p-3 text-left">
+                <p className="text-xs font-bold text-[#8A5B28] bn-text">
+                  {bn ? "প্রত্যাহারের রশিদ-টোকেন — এখনই সংরক্ষণ করুন (আর দেখানো হবে না)" : "Withdrawal receipt token — save it now (shown only once)"}
+                </p>
+                <p className="mt-1 break-all font-mono text-sm font-semibold text-[#202C26]">{result.withdrawToken}</p>
+                <div className="mt-2 flex justify-start">
+                  <CopyButton value={result.withdrawToken} label={bn ? "টোকেন কপি করুন" : "Copy token"} />
+                </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-[#59665F] bn-text">
+                  {bn
+                    ? "নিরাপত্তার জন্য: শুধু রেফারেন্স আইডি দিয়ে রিপোর্ট প্রত্যাহার করা যায় না — এই টোকেনটি লাগবে। হারিয়ে ফেললে সদস্য একাউন্ট থেকে ঢুকে প্রত্যাহার করতে পারবেন।"
+                    : "For security: the reference ID alone cannot withdraw a report — this token is required. If lost, sign in with your member account to withdraw."}
+                </p>
               </div>
             </div>
             <p className="text-xs text-[#59665F] bn-text">
               {bn
-                ? "এই আইডি দিয়ে যেকোনো সময় নিচের অংশ থেকে রিপোর্টটি প্রত্যাহার করতে পারবেন।"
-                : "Use this ID to withdraw the report anytime via the section below."}
+                ? "রেফারেন্স আইডি দিয়ে নিচের অংশে অবস্থা দেখতে পারবেন; প্রত্যাহারে টোকেনটি লাগবে।"
+                : "Use the reference ID below to check status; the token is needed to withdraw."}
             </p>
             <div className="flex justify-center gap-3 flex-wrap">
-              <Link to="/learn">
-                <Button variant="outline" className="border-[#2F5746]/50 text-[#2F5746] gap-2">
-                  {bn ? "স্ক্যামএকাডেমিতে যান" : "Go to ScamAcademy"}
-                </Button>
-              </Link>
-              <Link to="/check">
-                <Button className="bg-[#2F5746] text-[#FFFEFA] gap-2">
+              <Button asChild variant="outline" className="border-[#2F5746]/50 text-[#2F5746] gap-2">
+                <Link to="/learn">{bn ? "স্ক্যামএকাডেমিতে যান" : "Go to ScamAcademy"}</Link>
+              </Button>
+              <Button asChild className="bg-[#2F5746] text-[#FFFEFA] gap-2">
+                <Link to="/check">
                   {bn ? "আরেকটি যাচাই" : "Another check"} <ArrowRight className="h-4 w-4" aria-hidden />
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>

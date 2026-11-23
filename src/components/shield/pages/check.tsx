@@ -35,6 +35,20 @@ import { cn } from "@/lib/utils";
 import jsQR from "jsqr";
 import { getDemoPreset } from "../demo-presets";
 
+/** Minimal structural type for the vendor-prefixed Web Speech API used for
+ *  live Bangla recognition in the voice tab (V8). */
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onresult: ((event: { results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }> }) => void) | null;
+  onstart: (() => void) | null;
+  onerror: ((event: unknown) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
 export default function CheckPage({ initialTab }: { initialTab?: string }) {
   const bn = useLang() === "bn";
   const validTab = ["voice", "message", "image", "link"].includes(initialTab ?? "")
@@ -129,11 +143,11 @@ function ConsentGate({ checked, onChange, children }: { checked: boolean; onChan
         <span className="text-sm text-[#59665F] leading-relaxed bn-text">
           {bn ? (
             <>
-              আমি বুঝেছি: আমার দেওয়া লেখা/অডিও/ছবি <strong>সংরক্ষণ না করে</strong> প্রতারণা-যাচাইয়ের জন্য প্রক্রিয়া করা হবে; সংবেদনশীল তথ্য (ওটিপি, পিন, নম্বর) স্বয়ংক্রিয়ভাবে আড়াল করা হবে। ফোন কল বাংলাশিল্ড কখনোই রেকর্ড করে না।
+              আমি বুঝেছি: আমার দেওয়া <strong>কাঁচা অডিও/ছবি সংরক্ষণ না করে</strong> মেমোরিতে প্রক্রিয়া করা হয়; আড়াল করা লেখা ও ফলাফল <strong>সাময়িকভাবে</strong> (মেয়াদ শেষে স্বয়ংক্রিয়ভাবে মুছে যাওয়া পর্যন্ত) আমার সেশনের সাথে থাকে, যা আমি নিজেই মুছে দিতে পারি। সংবেদনশীল তথ্য (ওটিপি, পিন, নম্বর) স্বয়ংক্রিয়ভাবে আড়াল করা হয়। ফোন কল বাংলাশিল্ড কখনোই রেকর্ড করে না।
             </>
           ) : (
             <>
-              I understand: my text/audio/image will be processed <strong>without being stored</strong> for scam verification; sensitive data (OTPs, PINs, numbers) is redacted automatically. BanglaShield never records phone calls.
+              I understand: my <strong>raw audio/image is processed in memory without being stored</strong>; the redacted text and result are kept <strong>temporarily</strong> with my case (auto-deleted at expiry, or when I delete them myself). Sensitive data (OTPs, PINs, numbers) is redacted automatically. BanglaShield never records phone calls.
             </>
           )}
         </span>
@@ -282,13 +296,58 @@ function VoiceChecker({ demoText, demoAudio }: { demoText?: string; demoAudio?: 
   const [transcribing, setTranscribing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [transcriptOk, setTranscriptOk] = useState<boolean | null>(null);
+  /** Where the current transcript came from — labeled honestly (F-04/V8). */
+  const [transcriptSource, setTranscriptSource] = useState<"server-asr" | "browser-live" | null>(null);
+  const [liveBangla, setLiveBangla] = useState(false); // browser bn recognition active
   const [analyzing, setAnalyzing] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [caseId, setCaseId] = useState<string | null>(null);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const liveTextRef = useRef(""); // browser SpeechRecognition transcript
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
   const { createSession, navigate, fail } = useAnalysisLauncher();
+
+  // WebKit SpeechRecognition with a Bangla locale, run IN PARALLEL with the
+  // MediaRecorder capture. On the public deployment the server ASR is
+  // unavailable — this live Bangla recognition is what makes the voice tab
+  // genuinely work there. It is best-effort: silence/unsupported browsers
+  // simply leave the editable transcript as the fallback.
+  const startLiveRecognition = () => {
+    const SR = (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike; SpeechRecognition?: new () => SpeechRecognitionLike })
+      .SpeechRecognition ?? (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognitionLike }).webkitSpeechRecognition;
+    if (!SR) return;
+    try {
+      const rec = new SR();
+      rec.lang = "bn-BD";
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.onresult = (event) => {
+        let finalText = "";
+        let interim = "";
+        for (let i = 0; i < event.results.length; i++) {
+          const r = event.results[i];
+          if (r.isFinal) finalText += r[0].transcript;
+          else interim += r[0].transcript;
+        }
+        liveTextRef.current = (finalText + " " + interim).trim();
+      };
+      rec.onstart = () => setLiveBangla(true);
+      rec.onerror = () => setLiveBangla(false);
+      rec.onend = () => setLiveBangla(false);
+      rec.start();
+      recognitionRef.current = { stop: () => { try { rec.stop(); } catch { /* already stopped */ } } };
+    } catch {
+      /* unsupported/mic conflict — recorder alone still works */
+    }
+  };
+
+  const stopLiveRecognition = () => {
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    setLiveBangla(false);
+  };
 
   const cleanup = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -327,6 +386,8 @@ function VoiceChecker({ demoText, demoAudio }: { demoText?: string; demoAudio?: 
       recorder.start();
       setRecording(true);
       setSeconds(0);
+      liveTextRef.current = "";
+      startLiveRecognition(); // parallel Bangla live text (V8)
       timerRef.current = setInterval(() => {
         setSeconds((s) => {
           if (s >= 120) {
@@ -348,6 +409,7 @@ function VoiceChecker({ demoText, demoAudio }: { demoText?: string; demoAudio?: 
   const stopRecording = () => {
     if (mediaRef.current && mediaRef.current.state === "recording") mediaRef.current.stop();
     setRecording(false);
+    stopLiveRecognition();
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
@@ -417,22 +479,50 @@ function VoiceChecker({ demoText, demoAudio }: { demoText?: string; demoAudio?: 
         `/api/v1/analyses/${id}/input`,
         { kind: "audio", audioBase64: b64, mime: pickMime(source) }
       );
-      setTranscriptOk(res.transcriptOk ?? false);
-      const text = (res.transcript ?? "").trim();
-      if (text.length >= 4 && plausibleTranscript(text)) {
-        setTranscript(text);
-        // V4: speech → analysis in one flow. The transcript below stays
-        // visible/editable only if the user comes back (analysis page owns it now).
-        toast.success(bn ? "কথা লেখায় রূপান্তর হয়েছে — বিশ্লেষণ শুরু হচ্ছে…" : "Transcribed — starting the analysis…");
-        await analyzeWith(id, text);
-      } else {
-        // Empty or implausible (e.g. ASR mishearing Bengali as nonsense
-        // syllables) — keep the review step visible with retry + edit.
-        setTranscript(text);
-        setTranscriptOk(false);
-        if (res.message) toast.info(res.message);
+      const serverText = (res.transcript ?? "").trim();
+      const serverGood = serverText.length >= 4 && plausibleTranscript(serverText);
+      if (serverGood) {
+        // V8 (F-04 fix): the transcript ALWAYS lands in the editable review
+        // step first — the user confirms before analysis runs.
+        setTranscript(serverText);
+        setTranscriptOk(true);
+        setTranscriptSource("server-asr");
+        toast.success(bn ? "কথা লেখায় রূপান্তর হয়েছে — দেখে ঠিক থাকলে বিশ্লেষণ চালান" : "Transcribed — review it, then run the analysis");
+        return;
       }
+      // Server ASR empty/implausible → the parallel browser Bangla text may
+      // have captured the speech (primary path on the public deployment).
+      const live = liveTextRef.current.trim();
+      if (live.length >= 4) {
+        setTranscript(live);
+        setTranscriptOk(true);
+        setTranscriptSource("browser-live");
+        toast.success(
+          bn
+            ? "ব্রাউজারের বাংলা শনাক্তকরণ থেকে লেখা এসেছে — দেখে ঠিক থাকলে বিশ্লেষণ চালান"
+            : "Live Bangla recognition captured your speech — review it, then analyze"
+        );
+        return;
+      }
+      // Both engines empty — keep the editable fallback + retry hint.
+      setTranscript("");
+      setTranscriptOk(false);
+      setTranscriptSource(null);
+      if (res.message) toast.info(res.message);
     } catch (err) {
+      // Server unreachable (public deployment) — fall back to browser text.
+      const live = liveTextRef.current.trim();
+      if (live.length >= 4) {
+        setTranscript(live);
+        setTranscriptOk(true);
+        setTranscriptSource("browser-live");
+        toast.success(
+          bn
+            ? "ব্রাউজারের বাংলা শনাক্তকরণ থেকে লেখা এসেছে — দেখে ঠিক থাকলে বিশ্লেষণ চালান"
+            : "Live Bangla recognition captured your speech — review it, then analyze"
+        );
+        return;
+      }
       fail(err);
     } finally {
       setTranscribing(false);
@@ -542,6 +632,15 @@ function VoiceChecker({ demoText, demoAudio }: { demoText?: string; demoAudio?: 
               <p className="text-sm text-[#59665F] bn-text" aria-live="polite">
                 {bn ? "শুনছি… বলা শেষ হলে থামান" : "Listening… press stop when done"}
               </p>
+              {liveBangla && (
+                <p className="flex items-center gap-1.5 rounded-full bg-[#2F5746]/10 px-3 py-1 text-xs font-semibold text-[#2F5746] bn-text" role="status">
+                  <span className="relative flex h-2 w-2" aria-hidden>
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2F5746] opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[#2F5746]" />
+                  </span>
+                  {bn ? "বাংলা লাইভ লেখা চালু" : "Bangla live text on"}
+                </p>
+              )}
               <Button
                 size="lg"
                 onClick={stopRecording}
@@ -632,7 +731,7 @@ function VoiceChecker({ demoText, demoAudio }: { demoText?: string; demoAudio?: 
             {analyzing && (
               <p className="flex items-center gap-2 text-sm font-semibold text-[#2F5746] bn-text" role="status">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                {bn ? "রূপান্তর সফল — বিশ্লেষণ শুরু হয়েছে…" : "Transcribed — analysis started…"}
+                {bn ? "লেখা নিশ্চিত হয়েছে — বিশ্লেষণ শুরু হয়েছে…" : "Transcript confirmed — analysis started…"}
               </p>
             )}
             <Textarea
@@ -648,6 +747,13 @@ function VoiceChecker({ demoText, demoAudio }: { demoText?: string; demoAudio?: 
                 {bn
                   ? "স্বয়ংক্রিয় রূপান্তর স্পষ্ট হয়নি। চাইলে উপরের ঘরে যা শুনেছেন সেটুকু লিখে দিন বা বোতামে চেপে আবার চেষ্টা করুন — দুটোই ঠিক আছে।"
                   : "Automatic transcription was unclear. You may type what you heard above, or simply retry — both are fine."}
+              </p>
+            )}
+            {transcriptOk === true && transcriptSource && (
+              <p className="text-xs text-[#8A9B90] bn-text">
+                {transcriptSource === "browser-live"
+                  ? bn ? "সূত্র: ব্রাউজারের বাংলা লাইভ শনাক্তকরণ — চোখে দেখে ঠিক করে নিন" : "Source: browser live Bangla recognition — please review before analyzing"
+                  : bn ? "সূত্র: সার্ভারের ধ্বনি-রূপান্তর — চোখে দেখে ঠিক করে নিন" : "Source: server speech-to-text — please review before analyzing"}
               </p>
             )}
             {transcriptOk === true && !/[\u0980-\u09FF]/.test(transcript) && (
@@ -877,15 +983,39 @@ function LinkChecker({ demoUrl, demoId }: { demoUrl?: string; demoId?: string })
   const { createSession, navigate, fail } = useAnalysisLauncher();
 
   const onQrFile = async (f: File) => {
+    // F-07 fix: bound the input before decoding — type, size and decoded
+    // pixel dimensions — so a huge/malformed image cannot freeze a low-end
+    // browser. Large images are downscaled before jsQR runs.
+    if (!f.type.startsWith("image/")) {
+      toast.error(bn ? "ছবি ফাইল দিন (JPG/PNG)" : "Please provide an image file (JPG/PNG)");
+      return;
+    }
+    if (f.size > 8 * 1024 * 1024) {
+      toast.error(bn ? "ছবিটি খুব বড় (সর্বোচ্চ ৮ মেগাবাইট)" : "Image too large (max 8 MB)");
+      return;
+    }
+    let bitmap: ImageBitmap;
     try {
-      const bitmap = await createImageBitmap(f);
+      bitmap = await createImageBitmap(f);
+    } catch {
+      toast.error(bn ? "ছবিটি পড়া যায়নি — অন্য ছবি দিন" : "Could not read the image — try another one");
+      return;
+    }
+    try {
+      // Downscale anything above 1600px on its longest side (QR codes decode
+      // fine at that resolution; the canvas cost stays bounded).
+      const MAX_SIDE = 1600;
+      const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+      const w = Math.max(1, Math.round(bitmap.width * scale));
+      const h = Math.max(1, Math.round(bitmap.height * scale));
       const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("no-canvas");
-      ctx.drawImage(bitmap, 0, 0);
-      const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bitmap, 0, 0, w, h);
+      bitmap.close(); // release the decoded bitmap immediately
+      const data = ctx.getImageData(0, 0, w, h);
       const code = jsQR(data.data, data.width, data.height);
       if (code?.data) {
         setQrDecoded(code.data);

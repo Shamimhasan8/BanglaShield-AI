@@ -3,7 +3,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { newReportId } from "@/lib/crypto";
+import { newReportId, newWithdrawToken, sha256Hex } from "@/lib/crypto";
 import { ok, fail, readJson } from "@/lib/api";
 import { rateLimit, clientKey } from "@/lib/rate-limit";
 import { redactPII } from "@/lib/redact";
@@ -58,6 +58,11 @@ export async function POST(req: NextRequest) {
   // Signed-in members get private "My reports" tracking (never shown publicly).
   const member = await getMemberSession();
 
+  // F-03 fix (V8): mint a one-time withdrawal receipt token. Only its sha256
+  // hash is stored; the clear token is returned exactly once, to the
+  // submitter, and withdrawal requires it (or member authorship).
+  const withdrawToken = newWithdrawToken();
+
   await db.report.create({
     data: {
       id,
@@ -73,6 +78,7 @@ export async function POST(req: NextRequest) {
       } as unknown as object,
       status: "pending",
       synthetic: false,
+      withdrawTokenHash: sha256Hex(withdrawToken),
     },
   });
   if (sessionId) {
@@ -90,7 +96,15 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return ok({ id, status: "pending", note: "রিপোর্ট সংরক্ষিত হয়েছে (বেনামে)।" }, { status: 201 });
+  return ok(
+    {
+      id,
+      status: "pending",
+      withdrawToken,
+      note: "রিপোর্ট সংরক্ষিত হয়েছে (বেনামে)। প্রত্যাহারের রশিদ-টোকেনটি এখনই সংরক্ষণ করুন — এটি আর দেখানো হবে না।",
+    },
+    { status: 201 }
+  );
 }
 
 export async function GET(req: NextRequest) {
@@ -100,11 +114,11 @@ export async function GET(req: NextRequest) {
   }
   const report = await db.report.findUnique({ where: { id: ref } });
   if (!report) return fail("not-found", "এই রেফারেন্সে কোনো রিপোর্ট নেই।", 404);
+  // Read-only status lookup: minimal fields only, never the redacted body.
   return ok({
     id: report.id,
     status: report.status,
     category: report.category,
     submittedAt: report.submittedAt.toISOString(),
-    contentRedacted: report.contentRedacted,
   });
 }

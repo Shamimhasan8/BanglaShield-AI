@@ -377,12 +377,12 @@ function OverviewPanel({ onChat }: { onChat: () => void }) {
               <MessageSquareText className="mr-2 h-4 w-4" aria-hidden />
               {bn ? "শিল্ডএজেন্টকে জিজ্ঞাসা করুন" : "Ask ShieldAgent"}
             </Button>
-            <Link to="/check">
-              <Button className="h-11 w-full bg-[#FFFEFA] text-[#2F5746] hover:bg-[#F1EEE5] font-bold rounded-xl">
+            <Button asChild className="h-11 w-full bg-[#FFFEFA] text-[#2F5746] hover:bg-[#F1EEE5] font-bold rounded-xl">
+              <Link to="/check">
                 <ScanSearch className="mr-2 h-4 w-4" aria-hidden />
                 {bn ? "কনটেন্ট যাচাই করুন" : "Verify content"}
-              </Button>
-            </Link>
+              </Link>
+            </Button>
           </div>
         </div>
       </div>

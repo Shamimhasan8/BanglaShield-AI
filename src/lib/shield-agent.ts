@@ -36,6 +36,9 @@ export interface ChatOutcome {
   reply: string;
   engine: "live-ai" | "rule-based-fallback";
   note?: { bn: string; en: string };
+  /** OpenRouter model that actually served the live reply (honest labeling). */
+  servedModel?: string;
+  servingProvider?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +92,10 @@ function stripUntrustedContacts(text: string): string {
     .replace(/\+?\d[\d\s-]{7,}\d/g, "[নম্বর সরানো হয়েছে]");
 }
 
-export async function chatWithShieldAgent(messages: ChatMessage[]): Promise<ChatOutcome> {
+export async function chatWithShieldAgent(
+  messages: ChatMessage[],
+  modelOverride?: string
+): Promise<ChatOutcome> {
   // Trim history: keep the last 10 user/assistant turns (client also caps).
   // EVERY outbound turn is redacted — client-supplied assistant history is
   // untrusted input, not evidence of what was actually said before.
@@ -104,10 +110,16 @@ export async function chatWithShieldAgent(messages: ChatMessage[]): Promise<Chat
       { role: "system", content: CHAT_SYSTEM_PROMPT },
       ...history,
     ],
+    modelOverride,
   });
 
   if (result.ok && result.text) {
-    return { reply: stripUntrustedContacts(result.text).slice(0, 4000), engine: "live-ai" };
+    return {
+      reply: stripUntrustedContacts(result.text).slice(0, 4000),
+      engine: "live-ai",
+      servedModel: result.model,
+      servingProvider: result.servingProvider,
+    };
   }
   return ruleBasedChat(history);
 }

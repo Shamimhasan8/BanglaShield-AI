@@ -6,19 +6,22 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Bot, Send, Loader2, User, ShieldQuestion, ChevronDown, ChevronRight } from "lucide-react";
+import { Bot, Send, Loader2, User, ShieldQuestion, ChevronDown, ChevronRight, Cpu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api, ShieldApiError } from "../api";
 import { useLang } from "../i18n";
+import { CHAT_MODEL_CATALOG } from "@/lib/chat-models";
 import { cn } from "@/lib/utils";
 
 interface Msg {
   role: "user" | "assistant";
   content: string;
   engine?: string; // assistant messages
+  servedModel?: string | null; // OpenRouter model that served the reply
 }
 
 const QUICK_PROMPTS = [
@@ -40,6 +43,8 @@ const QUICK_PROMPTS = [
   },
 ];
 
+const MODEL_STORAGE_KEY = "banglashield.chat.model";
+
 export function AgentChat({ compact = false }: { compact?: boolean }) {
   const bn = useLang() === "bn";
   const [messages, setMessages] = useState<Msg[]>([]);
@@ -47,6 +52,24 @@ export function AgentChat({ compact = false }: { compact?: boolean }) {
   const [busy, setBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [howOpen, setHowOpen] = useState(false);
+  const [model, setModel] = useState<string>("auto");
+
+  // Restore the user's last model selection.
+  useEffect(() => {
+    const saved = localStorage.getItem(MODEL_STORAGE_KEY);
+    if (saved && (saved === "auto" || CHAT_MODEL_CATALOG.some((m) => m.id === saved))) {
+      setModel(saved);
+    }
+  }, []);
+
+  const pickModel = (id: string) => {
+    setModel(id);
+    try {
+      localStorage.setItem(MODEL_STORAGE_KEY, id);
+    } catch {
+      /* private mode — selection still applies for this session */
+    }
+  };
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -60,11 +83,16 @@ export function AgentChat({ compact = false }: { compact?: boolean }) {
     setInput("");
     setBusy(true);
     try {
-      const res = await api.post<{ reply: string; engine: string; note: { bn: string; en: string } | null }>(
-        "/api/v1/agent/chat",
-        { messages: next.slice(-12).map((m) => ({ role: m.role, content: m.content })) }
-      );
-      setMessages([...next, { role: "assistant", content: res.reply, engine: res.engine }]);
+      const res = await api.post<{
+        reply: string;
+        engine: string;
+        note: { bn: string; en: string } | null;
+        servedModel?: string | null;
+      }>("/api/v1/agent/chat", {
+        messages: next.slice(-12).map((m) => ({ role: m.role, content: m.content })),
+        model: model === "auto" ? undefined : model,
+      });
+      setMessages([...next, { role: "assistant", content: res.reply, engine: res.engine, servedModel: res.servedModel }]);
       if (res.engine === "rule-based-fallback") {
         toast.info(bn ? "লাইভ এআই এখন অফলাইন — নিয়মভিত্তিক উত্তর দেওয়া হলো (লেবেলকৃত)" : "Live AI offline — labeled rule-based reply given");
       }
@@ -92,6 +120,41 @@ export function AgentChat({ compact = false }: { compact?: boolean }) {
               {bn ? "সচেতনতা-সহায়তা · ব্যাংক/পুলিশ নয়" : "Awareness support · not a bank/police"}
             </Badge>
           </div>
+
+          {/* model selection — every reply labels the model that served it */}
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <span className="flex items-center gap-1.5 text-xs font-bold text-[#59665F] bn-text">
+              <Cpu className="h-3.5 w-3.5" aria-hidden />
+              {bn ? "এআই মডেল:" : "AI model:"}
+            </span>
+            <Select value={model} onValueChange={pickModel}>
+              <SelectTrigger
+                className="h-8 w-auto min-w-[190px] border-[#2F5746]/40 bg-[#FFFEFA] text-[13px] text-[#2F5746] focus:ring-[#2F5746]"
+                aria-label={bn ? "চ্যাট মডেল নির্বাচন" : "Chat model selection"}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="max-h-96">
+                <SelectItem value="auto" className="text-[13px]">
+                  {bn ? "স্বয়ংক্রিয় (প্রস্তাবিত)" : "Auto (recommended)"}
+                </SelectItem>
+                {CHAT_MODEL_CATALOG.map((m) => (
+                  <SelectItem key={m.id} value={m.id} className="text-[13px]">
+                    <span className="flex flex-col items-start py-0.5">
+                      <span className="font-semibold bn-text">{bn ? m.labelBn : m.label}</span>
+                      <span className="text-[11px] text-[#8A9B90]">{m.note}</span>
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {model !== "auto" && (
+              <Badge variant="outline" className="border-[#8A5B28]/40 text-[#8A5B28] text-[10px]">
+                {bn ? "আপনি বেছে নিয়েছেন" : "your pick"}
+              </Badge>
+            )}
+          </div>
+
           <p className="mt-2 text-sm text-[#59665F] bn-text">
             {bn
               ? "প্রতারণা নিয়ে যেকোনো প্রশ্ন করুন — বাংলা বা ইংরেজি। সতর্কতা: এআই ভুল করতে পারে; গুরুত্বপূর্ণ সিদ্ধান্ত নিজে যাচাই করে নিন।"
@@ -143,7 +206,7 @@ export function AgentChat({ compact = false }: { compact?: boolean }) {
                   {m.role === "assistant" && m.engine && (
                     <p className="mt-1 text-[10px] text-[#8A9B90] bn-text">
                       {m.engine === "live-ai"
-                        ? bn ? "লাইভ এআই উত্তর" : "Live AI reply"
+                        ? `${bn ? "লাইভ এআই উত্তর" : "Live AI reply"}${m.servedModel ? ` · ${m.servedModel}` : ""}`
                         : bn ? "নিয়মভিত্তিক ফলব্যাক (লাইভ এআই নয়)" : "Rule-based fallback (not live AI)"}
                     </p>
                   )}

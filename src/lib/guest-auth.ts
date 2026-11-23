@@ -29,10 +29,36 @@ const COOKIE_MAX_AGE = 180 * 24 * 60 * 60; // 180 days
 const LEGACY_RX = /^[A-Za-z0-9_-]{16,64}$/;
 
 function hmacKey(): string {
-  // Dev fallback keeps local demos working; production must set SESSION_SECRET
-  // (documented in .env.example and the deployment checklist).
-  return process.env.SESSION_SECRET || "banglashield-dev-session-key";
+  // F-02 fix (V8): never sign with a KNOWN CONSTANT in production.
+  //   dev (local sandbox)  → documented dev fallback, convenient and fine.
+  //   production           → SESSION_SECRET when set; otherwise a key derived
+  //                          from DATABASE_URL. That derivation is stable
+  //                          across instances (cookies keep working) yet not
+  //                          guessable by visitors (the env value is never
+  //                          exposed client-side). A warning is logged so
+  //                          operators set a real SESSION_SECRET.
+  const secret = process.env.SESSION_SECRET;
+  if (secret && secret.trim().length > 0) return secret.trim();
+  if (process.env.NODE_ENV === "production") {
+    const derived = process.env.DATABASE_URL;
+    if (derived && derived.trim().length > 0) {
+      // Only warn once per process.
+      if (!warned) {
+        warned = true;
+        console.warn(
+          "[banglashield] SESSION_SECRET is not set — using a DATABASE_URL-derived signing key. Set SESSION_SECRET for production."
+        );
+      }
+      return `bs-derived:${derived}`;
+    }
+    // Last resort: a per-process random key (secure, but sessions do not
+    // survive cold starts — still strictly safer than a public constant).
+    return `bs-random:${randomBytes(32).toString("hex")}`;
+  }
+  return "banglashield-dev-session-key";
 }
+
+let warned = false;
 
 function sign(id: string): string {
   return createHmac("sha256", hmacKey()).update(id).digest("base64url");

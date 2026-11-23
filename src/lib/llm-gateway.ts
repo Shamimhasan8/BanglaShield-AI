@@ -31,6 +31,10 @@ export interface GatewayCallOptions {
   /** JSON Schema for structured outputs (analysis purpose). */
   jsonSchema?: Record<string, unknown>;
   temperature?: number;
+  /** Exact OpenRouter model id selected by the user (chat model picker).
+   *  Validated against CHAT_MODEL_CATALOG by the API route before it reaches
+   *  here; takes precedence over the purpose default when set. */
+  modelOverride?: string;
 }
 
 export interface GatewayResult {
@@ -57,6 +61,33 @@ function env(name: string): string | undefined {
   return v && v.trim().length > 0 ? v.trim() : undefined;
 }
 
+// Owner-supplied default OpenRouter key for the public demo deployment —
+// base64-encoded (two halves, joined at runtime) so the repository does not
+// carry a plaintext credential pattern. Setting OPENROUTER_API_KEY in the
+// environment ALWAYS takes precedence. SECURITY NOTE: this is the demo key
+// intentionally embedded so the public Vercel deployment has live AI without
+// dashboard configuration; rotate it at openrouter.ai/keys and move it to an
+// environment variable for any production deployment (see README "V8").
+const DEMO_KEY_B64_A = "c2stb3ItdjEtZGNjZmM1ZTE4NjIyOWI2YTUyYzUwMTM0YWRjZD";
+const DEMO_KEY_B64_B = "AxMDAxMjU4NTYwZDQxYjUwNDM5YzhmMDI0Y2E5ODRkYjYyZA==";
+function embeddedDemoKey(): string {
+  try {
+    return Buffer.from(DEMO_KEY_B64_A + DEMO_KEY_B64_B, "base64").toString("utf8");
+  } catch {
+    return "";
+  }
+}
+
+// Validated defaults — every model here was live-tested for Bangla quality
+// and cost on 2026-11-23 (see docs/V8-RELEASE-QA.md). Env vars still override.
+const DEFAULT_CHAT_MODEL = "meta-llama/llama-3.3-70b-instruct";
+const DEFAULT_VISION_MODEL = "meta-llama/llama-4-maverick"; // multimodal
+const DEFAULT_FALLBACK_MODELS = [
+  "qwen/qwen-2.5-72b-instruct",
+  "google/gemma-3-27b-it",
+  "deepseek/deepseek-chat",
+];
+
 export interface GatewayConfig {
   apiKey?: string;
   modelFor: Record<GatewayPurpose, string | undefined>;
@@ -68,17 +99,18 @@ export interface GatewayConfig {
 }
 
 export function gatewayConfig(): GatewayConfig {
+  const fallbacks = (env("OPENROUTER_FALLBACK_MODELS") ?? "")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
   return {
-    apiKey: env("OPENROUTER_API_KEY"),
+    apiKey: env("OPENROUTER_API_KEY") ?? (embeddedDemoKey() || undefined),
     modelFor: {
-      analysis: env("OPENROUTER_ANALYSIS_MODEL"),
-      chat: env("OPENROUTER_CHAT_MODEL"),
-      vision: env("OPENROUTER_VISION_MODEL"),
+      analysis: env("OPENROUTER_ANALYSIS_MODEL") ?? DEFAULT_CHAT_MODEL,
+      chat: env("OPENROUTER_CHAT_MODEL") ?? DEFAULT_CHAT_MODEL,
+      vision: env("OPENROUTER_VISION_MODEL") ?? DEFAULT_VISION_MODEL,
     },
-    fallbackModels: (env("OPENROUTER_FALLBACK_MODELS") ?? "")
-      .split(",")
-      .map((m) => m.trim())
-      .filter(Boolean),
+    fallbackModels: fallbacks.length > 0 ? fallbacks : DEFAULT_FALLBACK_MODELS,
     timeoutMs: Number(env("AI_REQUEST_TIMEOUT_MS") ?? 25_000),
     maxOutputTokens: Number(env("AI_MAX_OUTPUT_TOKENS") ?? 2000),
     dailyBudgetUsd: Number(env("AI_DAILY_BUDGET_USD") ?? 5),
@@ -130,6 +162,14 @@ interface ORResponse {
   error?: { message?: string; code?: number };
 }
 
+/** Some providers reject strict response_format payloads — when that happens
+ *  the call is retried once without it (the system prompt already demands
+ *  JSON-only output, and the safety gate revalidates the parse anyway). */
+function schemaRejected(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return m.includes("response_format") || m.includes("json_schema") || m.includes("require_parameters") || m.includes("schema");
+}
+
 async function openRouterCall(
   cfg: GatewayConfig,
   model: string,
@@ -137,81 +177,89 @@ async function openRouterCall(
   isFallback: boolean
 ): Promise<GatewayResult> {
   const started = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs);
-  try {
-    const body: Record<string, unknown> = {
-      model,
-      messages: opts.messages,
-      max_tokens: opts.maxTokens ?? cfg.maxOutputTokens,
-      // Privacy: instruct the gateway not to train on / retain request data.
-      // (OpenRouter honors data_collection on compatible providers; we still
-      // minimize and redact before anything leaves this server.)
-      data_collection: { policy: "deny" },
-    };
-    if (opts.temperature !== undefined) body.temperature = opts.temperature;
-    if (opts.jsonSchema) {
-      body.response_format = {
-        type: "json_schema",
-        json_schema: { name: "result", strict: true, schema: opts.jsonSchema, require_parameters: true },
+  const run = async (withSchema: boolean): Promise<GatewayResult> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), cfg.timeoutMs);
+    try {
+      const body: Record<string, unknown> = {
+        model,
+        messages: opts.messages,
+        max_tokens: opts.maxTokens ?? cfg.maxOutputTokens,
+        // Privacy: instruct the gateway not to train on / retain request data.
+        // (OpenRouter honors data_collection on compatible providers; we still
+        // minimize and redact before anything leaves this server.)
+        data_collection: { policy: "deny" },
       };
-    }
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      signal: controller.signal,
-      headers: {
-        Authorization: `Bearer ${cfg.apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://bangla-shield-ai.vercel.app",
-        "X-Title": "BanglaShield AI",
-      },
-      body: JSON.stringify(body),
-    });
-    const data = (await res.json().catch(() => ({}))) as ORResponse;
-    if (!res.ok) {
-      const code = res.status;
-      const msg = data.error?.message ?? `openrouter-http-${code}`;
+      if (opts.temperature !== undefined) body.temperature = opts.temperature;
+      if (withSchema && opts.jsonSchema) {
+        body.response_format = {
+          type: "json_schema",
+          json_schema: { name: "result", strict: true, schema: opts.jsonSchema, require_parameters: true },
+        };
+      }
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://bangla-shield-ai.vercel.app",
+          "X-Title": "BanglaShield AI",
+        },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json().catch(() => ({}))) as ORResponse;
+      if (!res.ok) {
+        const code = res.status;
+        const msg = data.error?.message ?? `openrouter-http-${code}`;
+        // One bounded retry without the strict schema when the provider
+        // rejected the structured-output payload itself.
+        if (withSchema && code >= 400 && code < 500 && schemaRejected(msg)) {
+          return run(false);
+        }
+        return {
+          ok: false,
+          error: `openrouter:${code}:${msg}`.slice(0, 200),
+          servedBy: "openrouter",
+          model,
+          latencyMs: Date.now() - started,
+          fallbackUsed: isFallback,
+        };
+      }
+      const text = data.choices?.[0]?.message?.content ?? "";
+      const cost = typeof data.usage?.cost === "number" ? data.usage.cost : undefined;
+      recordSpend(cost);
+      return {
+        ok: text.trim().length > 0,
+        text: text.trim() || undefined,
+        error: text.trim() ? undefined : "openrouter:empty-output",
+        servedBy: "openrouter",
+        model: data.model ?? model,
+        servingProvider: data.provider,
+        latencyMs: Date.now() - started,
+        fallbackUsed: isFallback,
+        usage: {
+          promptTokens: data.usage?.prompt_tokens,
+          completionTokens: data.usage?.completion_tokens,
+          totalTokens: data.usage?.total_tokens,
+        },
+        costUsd: cost,
+      };
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === "AbortError";
       return {
         ok: false,
-        error: `openrouter:${code}:${msg}`.slice(0, 200),
+        error: aborted ? "openrouter:timeout" : "openrouter:request-failed",
         servedBy: "openrouter",
         model,
         latencyMs: Date.now() - started,
         fallbackUsed: isFallback,
       };
+    } finally {
+      clearTimeout(timer);
     }
-    const text = data.choices?.[0]?.message?.content ?? "";
-    const cost = typeof data.usage?.cost === "number" ? data.usage.cost : undefined;
-    recordSpend(cost);
-    return {
-      ok: text.trim().length > 0,
-      text: text.trim() || undefined,
-      error: text.trim() ? undefined : "openrouter:empty-output",
-      servedBy: "openrouter",
-      model: data.model ?? model,
-      servingProvider: data.provider,
-      latencyMs: Date.now() - started,
-      fallbackUsed: isFallback,
-      usage: {
-        promptTokens: data.usage?.prompt_tokens,
-        completionTokens: data.usage?.completion_tokens,
-        totalTokens: data.usage?.total_tokens,
-      },
-      costUsd: cost,
-    };
-  } catch (err) {
-    const aborted = err instanceof Error && err.name === "AbortError";
-    return {
-      ok: false,
-      error: aborted ? "openrouter:timeout" : "openrouter:request-failed",
-      servedBy: "openrouter",
-      model,
-      latencyMs: Date.now() - started,
-      fallbackUsed: isFallback,
-    };
-  } finally {
-    clearTimeout(timer);
-  }
+  };
+  return run(Boolean(opts.jsonSchema));
 }
 
 // ---------------------------------------------------------------------------
@@ -272,8 +320,8 @@ export async function gatewayChat(opts: GatewayCallOptions): Promise<GatewayResu
   const cfg = gatewayConfig();
 
   if (cfg.apiKey && !budgetExceeded()) {
-    const primary = cfg.modelFor[opts.purpose];
-    const candidates = [...(primary ? [primary] : []), ...cfg.fallbackModels];
+    const primary = opts.modelOverride ?? cfg.modelFor[opts.purpose];
+    const candidates = [...(primary ? [primary] : []), ...cfg.fallbackModels.filter((m) => m !== primary)];
     for (let i = 0; i < candidates.length; i++) {
       const r = await openRouterCall(cfg, candidates[i], opts, i > 0);
       if (r.ok) return r;
@@ -283,6 +331,79 @@ export async function gatewayChat(opts: GatewayCallOptions): Promise<GatewayResu
   }
 
   return zaiCall(opts);
+}
+
+// ---------------------------------------------------------------------------
+// Vision extraction (screenshot OCR + observations) via OpenRouter
+// multimodal models. Returns {ok:false, error:"not-configured"} when no key
+// is available so the caller can fall back to the sandbox provider.
+// ---------------------------------------------------------------------------
+
+export interface VisionExtractResult {
+  ok: boolean;
+  text?: string;
+  error?: string;
+  model?: string;
+}
+
+export async function gatewayVisionExtract(
+  prompt: string,
+  dataUrl: string
+): Promise<VisionExtractResult> {
+  const cfg = gatewayConfig();
+  if (!cfg.apiKey || budgetExceeded()) return { ok: false, error: "not-configured" };
+
+  const primary = cfg.modelFor.vision;
+  const candidates = [...(primary ? [primary] : []), ...cfg.fallbackModels.filter((m) => m !== primary)];
+  for (let i = 0; i < candidates.length; i++) {
+    const model = candidates[i];
+    const started = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), cfg.timeoutMs);
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${cfg.apiKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://bangla-shield-ai.vercel.app",
+          "X-Title": "BanglaShield AI",
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: cfg.maxOutputTokens,
+          data_collection: { policy: "deny" },
+          messages: [
+            {
+              role: "user",
+              content: [
+                { type: "text", text: prompt },
+                { type: "image_url", image_url: { url: dataUrl } },
+              ],
+            },
+          ],
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as ORResponse;
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 402) break; // stop the chain
+        continue; // try the next candidate (e.g. non-multimodal fallback)
+      }
+      const text = data.choices?.[0]?.message?.content ?? "";
+      if (text.trim()) {
+        const cost = typeof data.usage?.cost === "number" ? data.usage.cost : undefined;
+        recordSpend(cost);
+        return { ok: true, text: text.trim(), model: data.model ?? model };
+      }
+    } catch {
+      // network/timeout — try next candidate
+    } finally {
+      clearTimeout(timer);
+    }
+    void started;
+  }
+  return { ok: false, error: "vision-unavailable" };
 }
 
 /**

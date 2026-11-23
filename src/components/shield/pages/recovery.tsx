@@ -511,11 +511,11 @@ export default function RecoveryPage() {
               {bn ? "বেনামে, ঐচ্ছিক — আপনার দেওয়া তথ্য থেকে অন্য মানুষ সাবধান হতে পারবে।" : "Anonymous, optional — your report helps others stay alert."}
             </p>
           </div>
-          <Link to="/community">
-            <Button className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A] gap-2 font-bold">
+          <Button asChild className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A] gap-2 font-bold">
+            <Link to="/community">
               {bn ? "রিপোর্ট করুন" : "Report now"} <ArrowRight className="h-4 w-4" aria-hidden />
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         </CardContent>
       </Card>
         </TabsContent>
@@ -541,16 +541,14 @@ export default function RecoveryPage() {
                   : "More questions? Ask ShieldAgent or post on the community help board."}
               </p>
               <div className="flex gap-2 shrink-0">
-                <Link to="/help?tab=agent">
-                  <Button variant="outline" className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] h-11 gap-1.5 font-semibold">
+                <Button asChild variant="outline" className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] h-11 gap-1.5 font-semibold">
+                  <Link to="/help?tab=agent">
                     <Bot className="h-4 w-4" aria-hidden /> {bn ? "এআই সহকারী" : "AI assistant"}
-                  </Button>
-                </Link>
-                <Link to="/community?tab=help">
-                  <Button variant="outline" className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] h-11 font-semibold">
-                    {bn ? "কমিউনিটি" : "Community"}
-                  </Button>
-                </Link>
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] h-11 font-semibold">
+                  <Link to="/community?tab=help">{bn ? "কমিউনিটি" : "Community"}</Link>
+                </Button>
               </div>
             </CardContent>
           </Card>

@@ -329,6 +329,8 @@ export function ScamVideoPlayer({ video, onExit }: { video: ScamVideo; onExit: (
       audioRef.current.src = "";
       audioRef.current = null;
     }
+    // Stop the browser Bangla narration engine as well (scene switch/pause).
+    void import("../speech").then(({ stopBanglaSpeech }) => stopBanglaSpeech());
   }, []);
 
   // Scene driver: loads narration audio (cached), plays it, advances on end;
@@ -359,10 +361,33 @@ export function ScamVideoPlayer({ video, onExit }: { video: ScamVideo; onExit: (
         return;
       }
 
+      // V8: narrate through the Bangla voice chain — the device's genuine
+      // Bangla voice first (works on the public deployment), the server TTS
+      // as fallback. Scene advance + progress are driven by the chain result.
+      setAudioBusy(true);
+      const { speakBangla, pickBanglaVoice } = await import("../speech");
+      const hasBrowserVoice = pickBanglaVoice() !== null;
+      if (hasBrowserVoice) {
+        setAudioBusy(false);
+        const dur = estimateDuration(text);
+        const startedAt = Date.now();
+        timerRef.current = setInterval(() => {
+          setProgress(Math.min(1, ((Date.now() - startedAt) * rate) / dur));
+        }, 120);
+        const served = await speakBangla(text, { speed: rate });
+        if (served !== "failed") {
+          advance();
+          return;
+        }
+        // browser engine failed mid-flight → timed fallback below
+        const dur2 = estimateDuration(text);
+        fallbackRef.current = setTimeout(advance, dur2 / rate);
+        return;
+      }
+
       const cacheKey = `${video.id}:${idx}:${bn ? "bn" : "en"}`;
       let url = audioCache.current.get(cacheKey);
       if (!url) {
-        setAudioBusy(true);
         try {
           const res = await api.postRaw("/api/v1/tts", { text: text.slice(0, 1000), speed: 1 });
           const blob = await res.blob();
@@ -380,6 +405,8 @@ export function ScamVideoPlayer({ video, onExit }: { video: ScamVideo; onExit: (
           }, 120);
           return;
         }
+        setAudioBusy(false);
+      } else {
         setAudioBusy(false);
       }
 
@@ -405,7 +432,6 @@ export function ScamVideoPlayer({ video, onExit }: { video: ScamVideo; onExit: (
   // the setState calls inside runScene are intentional (app.tsx convention).
   useEffect(() => {
     if (playing) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       runScene(sceneIdx, audioOn, speed);
     } else {
       cleanupScene();
@@ -513,11 +539,9 @@ export function ScamVideoPlayer({ video, onExit }: { video: ScamVideo; onExit: (
                     <RotateCcw className="h-4 w-4" aria-hidden />
                     {bn ? "আবার দেখুন" : "Watch again"}
                   </Button>
-                  <Link to={`/check`}>
-                    <Button className="bg-[#DDE8DF] text-[#202C26] hover:bg-[#CBDCD0] h-11 font-bold">
-                      {bn ? "নিজের বার্তা যাচাই করুন" : "Check your own message"}
-                    </Button>
-                  </Link>
+                  <Button asChild className="bg-[#DDE8DF] text-[#202C26] hover:bg-[#CBDCD0] h-11 font-bold">
+                    <Link to={`/check`}>{bn ? "নিজের বার্তা যাচাই করুন" : "Check your own message"}</Link>
+                  </Button>
                 </div>
               </motion.div>
             )}

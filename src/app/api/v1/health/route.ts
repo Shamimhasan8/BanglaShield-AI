@@ -27,6 +27,25 @@ export async function GET(_req: NextRequest) {
     }
   }
 
+  // F-09 fix (V8): a degraded backend must fail HTTP monitoring honestly —
+  // 503 when the database is down, 200 only when ready to serve.
+  if (!dbOk) {
+    return ok(
+      {
+        status: "degraded",
+        checks: {
+          database: "fail",
+          llmGateway: openRouterConfigured() ? "openrouter" : "sandbox-provider",
+          aiProvider: "per-case",
+        },
+        retention: { expiredSwept: 0 },
+        latencyMs: Date.now() - started,
+        time: new Date().toISOString(),
+      },
+      { status: 503 }
+    );
+  }
+
   return ok({
     status: dbOk ? "ok" : "degraded",
     checks: {

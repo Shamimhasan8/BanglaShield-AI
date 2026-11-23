@@ -199,6 +199,36 @@ Supabase, Vercel Postgres, …), flip the schema provider to `postgresql`, set
 `DATABASE_URL` (and a strong `SESSION_SECRET`) in the Vercel project's
 environment variables, and redeploy.
 
+**V8 — live AI on the public demo (OpenRouter).** The deployment ships with an
+owner-supplied OpenRouter key embedded as a server-side default
+(`src/lib/llm-gateway.ts`) so the public demo has live AI without any dashboard
+configuration. Everything remains env-overridable:
+
+- Set `OPENROUTER_API_KEY` in the Vercel project settings to replace the
+  embedded demo key (recommended before any real production use — rotate the
+  embedded key at openrouter.ai/keys once you do).
+- Model defaults are live-tested Bangla-capable choices; per-purpose overrides:
+  `OPENROUTER_CHAT_MODEL`, `OPENROUTER_ANALYSIS_MODEL`,
+  `OPENROUTER_VISION_MODEL`, `OPENROUTER_FALLBACK_MODELS`.
+- The ShieldAgent chat has a **model selector** (Auto / Llama 3.3 70B /
+  Gemma 3 27B / Mistral Small 3.2 / DeepSeek V3 / Qwen 2.5 72B /
+  Llama 4 Maverick) — the catalog lives in `src/lib/chat-models.ts` (client-safe,
+  no secrets) and every reply is labeled with the model that actually served it.
+- **Bangla voice**: narration uses the device's genuine Bangla voice
+  (browser speechSynthesis, bn-BD preferred) first and the server TTS as
+  fallback; the engine actually used is labeled on screen. Voice input runs
+  live Bangla recognition (Web Speech API, `bn-BD`) in parallel with the
+  server ASR, so the voice tab works on the public deployment too.
+- **Report withdrawal** now requires a one-time receipt token issued at
+  submission (or a signed-in author account) — the public reference ID alone
+  can no longer withdraw a report (V8 security fix).
+
+**Known serverless limitation (documented honestly):** with the default SQLite
+provider, database-backed data is per-instance and does not persist across
+serverless cold starts; rate limits and the AI daily-budget ledger are
+per-process. For a durable production deployment use hosted PostgreSQL as
+described above.
+
 ---
 
 ## 8. Judge Demo Mode

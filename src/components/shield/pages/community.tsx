@@ -349,11 +349,9 @@ export default function CommunityPage() {
                 ? "এখনই টাকা গেছে বা কোড দিয়ে ফেলেছেন? — জরুরি ধাপগুলো আগে দেখুন।"
                 : "Already lost money or shared a code? — See the emergency steps first."}
             </p>
-            <Link to="/help">
-              <Button className="bg-[#A44435] text-[#FFFEFA] hover:bg-[#8C382B] h-11 font-bold rounded-xl">
-                {bn ? "জরুরি সহায়তা" : "Emergency help"}
-              </Button>
-            </Link>
+            <Button asChild className="bg-[#A44435] text-[#FFFEFA] hover:bg-[#8C382B] h-11 font-bold rounded-xl">
+              <Link to="/help">{bn ? "জরুরি সহায়তা" : "Emergency help"}</Link>
+            </Button>
           </div>
           <CommunityFeed forcedKind="help" />
         </TabsContent>

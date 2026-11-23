@@ -28,6 +28,7 @@ import {
   Clock,
   FileWarning,
   Volume2 as AudioIcon,
+  Square as SquareIcon,
 } from "lucide-react";
 import type { RiskCategory, Evidence, ReplayStage } from "@/lib/types";
 import { useBi, useT, useLang } from "./i18n";
@@ -380,48 +381,63 @@ export function SpeakButton({ text, label }: { text: string; label?: string }) {
   const { narration, lowBandwidth } = useSettings();
   const lang = useLang();
   const [playing, setPlaying] = useState(false);
+  const [engine, setEngine] = useState<"browser-bangla" | "server-tts" | null>(null);
   const [failed, setFailed] = useState(false);
   if (!narration || lowBandwidth) return null;
 
   const speak = async () => {
     setPlaying(true);
     setFailed(false);
-    try {
-      const { api } = await import("./api");
-      const res = await api.postRaw("/api/v1/tts", { text: text.slice(0, 1024), speed: 1 });
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => {
-        setPlaying(false);
-        URL.revokeObjectURL(url);
-      };
-      audio.onerror = () => {
-        setPlaying(false);
-        setFailed(true);
-        URL.revokeObjectURL(url);
-      };
-      await audio.play();
-    } catch {
-      setPlaying(false);
+    setEngine(null);
+    const { speakBangla, stopBanglaSpeech } = await import("./speech");
+    const served = await speakBangla(text, { speed: 1 });
+    if (served === "failed") {
       setFailed(true);
+    } else {
+      setEngine(served);
     }
+    setPlaying(false);
+  };
+
+  const stop = () => {
+    void import("./speech").then(({ stopBanglaSpeech }) => stopBanglaSpeech());
+    setPlaying(false);
   };
 
   return (
     <div className="inline-flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={speak}
-        disabled={playing}
-        className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] gap-1.5"
-        aria-label={label ?? (lang === "bn" ? "শুনুন" : "Listen")}
-      >
-        {playing ? <Clock className="h-4 w-4 animate-pulse" aria-hidden /> : <AudioIcon aria-hidden />}
-        {playing ? "চলছে…" : (label ?? (lang === "bn" ? "শুনুন" : "Listen"))}
-      </Button>
-      {failed && <span className="text-xs text-[#A44435] bn-text">ধ্বনি তৈরি করা যায়নি</span>}
+      {playing ? (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={stop}
+          className="border-[#A44435]/40 text-[#A44435] hover:bg-[#F4E7E4] gap-1.5"
+          aria-label={lang === "bn" ? "থামান" : "Stop"}
+        >
+          <SquareIcon className="h-4 w-4" aria-hidden />
+          {lang === "bn" ? "থামান" : "Stop"}
+        </Button>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={speak}
+          className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] gap-1.5"
+          aria-label={label ?? (lang === "bn" ? "শুনুন" : "Listen")}
+        >
+          <AudioIcon aria-hidden />
+          {label ?? (lang === "bn" ? "শুনুন" : "Listen")}
+        </Button>
+      )}
+      {playing && <span className="text-xs text-[#59665F] bn-text">{lang === "bn" ? "বাংলা ধ্বনি চলছে…" : "Bangla voice playing…"}</span>}
+      {engine && !playing && (
+        <span className="text-[10px] text-[#8A9B90] bn-text">
+          {engine === "browser-bangla"
+            ? lang === "bn" ? "ডিভাইসের বাংলা কণ্ঠ" : "device Bangla voice"
+            : lang === "bn" ? "সার্ভার ধ্বনি" : "server voice"}
+        </span>
+      )}
+      {failed && <span className="text-xs text-[#A44435] bn-text">{lang === "bn" ? "ধ্বনি তৈরি করা যায়নি — লেখাটি পড়ুন" : "Audio unavailable — please read the text"}</span>}
     </div>
   );
 }

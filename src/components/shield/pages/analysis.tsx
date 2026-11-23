@@ -333,11 +333,9 @@ export default function AnalysisPage({ caseId }: { caseId: string }) {
             <XCircle className="mx-auto h-10 w-10 text-[#A44435]" aria-hidden />
             <h1 className="text-xl font-bold text-[#202C26] bn-text">{bn ? "কেসটি খুঁজে পাওয়া যায়নি" : "Case not found"}</h1>
             <p className="text-[#59665F] bn-text">{loadError}</p>
-            <Link to="/check">
-              <Button className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
-                {bn ? "নতুন যাচাই শুরু করুন" : "Start a new check"}
-              </Button>
-            </Link>
+            <Button asChild className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
+              <Link to="/check">{bn ? "নতুন যাচাই শুরু করুন" : "Start a new check"}</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -365,11 +363,9 @@ export default function AnalysisPage({ caseId }: { caseId: string }) {
             <p className="text-[#59665F] bn-text">
               {bn ? "আপনার অনুরোধে এই কেসটি বাতিল করা হয়েছে।" : "This case was canceled at your request."}
             </p>
-            <Link to="/check">
-              <Button className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
-                {bn ? "নতুন যাচাই শুরু করুন" : "Start a new check"}
-              </Button>
-            </Link>
+            <Button asChild className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
+              <Link to="/check">{bn ? "নতুন যাচাই শুরু করুন" : "Start a new check"}</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -413,16 +409,12 @@ export default function AnalysisPage({ caseId }: { caseId: string }) {
                 : "Sorry — a technical issue stopped this analysis. Nothing was fabricated. Please try again."}
             </p>
             <div className="flex justify-center gap-3">
-              <Link to="/check">
-                <Button className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
-                  {bn ? "আবার চেষ্টা করুন" : "Try again"}
-                </Button>
-              </Link>
-              <Link to="/help">
-                <Button variant="outline" className="border-[#D8DED5]">
-                  {bn ? "সহায়তা" : "Help"}
-                </Button>
-              </Link>
+              <Button asChild className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
+                <Link to="/check">{bn ? "আবার চেষ্টা করুন" : "Try again"}</Link>
+              </Button>
+              <Button asChild variant="outline" className="border-[#D8DED5]">
+                <Link to="/help">{bn ? "সহায়তা" : "Help"}</Link>
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -753,18 +745,18 @@ export default function AnalysisPage({ caseId }: { caseId: string }) {
                 : "Not the number in the message — contact institutions yourself through verified channels:"}
             </p>
             <div className="mt-3 flex flex-wrap gap-2.5">
-              <Link to="/help" className="inline-flex">
-                <Button variant="outline" size="sm" className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] gap-1.5">
+              <Button asChild variant="outline" size="sm" className="border-[#2F5746]/40 text-[#2F5746] hover:bg-[#DDE8DF] gap-1.5">
+                <Link to="/help" className="inline-flex">
                   <Landmark className="h-4 w-4" aria-hidden />
                   {bn ? "যাচাইকৃত যোগাযোগ তালিকা" : "Verified contact list"}
-                </Button>
-              </Link>
-              <Link to="/help" className="inline-flex">
-                <Button variant="outline" size="sm" className="border-[#A44435]/40 text-[#A44435] hover:bg-[#F4E1DA] gap-1.5">
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm" className="border-[#A44435]/40 text-[#A44435] hover:bg-[#F4E1DA] gap-1.5">
+                <Link to="/help" className="inline-flex">
                   <EmergencyIcon className="h-4 w-4" aria-hidden />
                   {bn ? "ক্ষতি হলে জরুরি ধাপ" : "Emergency steps if harmed"}
-                </Button>
-              </Link>
+                </Link>
+              </Button>
             </div>
           </CardContent>
         </Card>

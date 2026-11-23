@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual, createHmac } from "crypto";
+import { randomBytes, scryptSync, timingSafeEqual, createHmac, createHash } from "crypto";
 
 // ---------------------------------------------------------------------------
 // Public-facing reference IDs (unguessable, human-readable)
@@ -31,6 +31,20 @@ export function newPostRef(): string {
 
 export function newVisitorToken(): string {
   return randomBytes(24).toString("base64url");
+}
+
+// ---------------------------------------------------------------------------
+// Report withdrawal receipt (F-03, V8)
+// ---------------------------------------------------------------------------
+
+/** One-time withdrawal receipt token — shown to the submitter exactly once. */
+export function newWithdrawToken(): string {
+  return randomBytes(20).toString("base64url"); // ~160 bits entropy
+}
+
+/** sha256 hex digest (used to store the withdrawal token, never in clear). */
+export function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
 }
 
 export function newLearnerToken(): string {

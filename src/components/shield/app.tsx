@@ -49,11 +49,9 @@ function NotFound() {
       <p className="mt-2 text-[#59665F] bn-text">
         {bn ? "ঠিকানাটি আবার দেখে নিন, কিংবা হোমে ফিরে যান।" : "Please check the address, or return home."}
       </p>
-      <Link to="/" className="mt-6 inline-block">
-        <Button className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
-          {bn ? "হোমে ফিরুন" : "Back home"}
-        </Button>
-      </Link>
+      <Button asChild className="bg-[#2F5746] text-[#FFFEFA] hover:bg-[#24453A]">
+        <Link to="/" className="mt-6 inline-block">{bn ? "হোমে ফিরুন" : "Back home"}</Link>
+      </Button>
     </div>
   );
 }

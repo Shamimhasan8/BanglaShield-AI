@@ -6,6 +6,7 @@
 // ---------------------------------------------------------------------------
 
 import ZAI from "z-ai-web-dev-sdk";
+import { gatewayVisionExtract } from "./llm-gateway";
 import { redactPII } from "./redact";
 
 export interface TranscribeResult {
@@ -73,7 +74,39 @@ RULES:
 
 Respond ONLY with JSON: {"text": "<all visible text>", "notes": ["<observation 1>", "<observation 2>"]}`;
 
+function parseOcrJson(raw: string): { text?: string; notes?: string[] } | null {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const s = raw.indexOf("{");
+    const e = raw.lastIndexOf("}");
+    if (s >= 0 && e > s) {
+      try {
+        return JSON.parse(raw.slice(s, e + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 export async function extractImageContent(dataUrl: string): Promise<ExtractImageResult> {
+  // Provider chain: OpenRouter multimodal (works on any deployment) →
+  // sandbox ZAI vision → failure (caller shows the editable text fallback).
+  const orResult = await gatewayVisionExtract(VLM_PROMPT, dataUrl);
+  if (orResult.ok && orResult.text) {
+    const parsed = parseOcrJson(orResult.text);
+    if (parsed && typeof parsed.text === "string") {
+      const { text } = redactPII(parsed.text);
+      const notes = (parsed.notes ?? [])
+        .filter((n) => typeof n === "string")
+        .slice(0, 8)
+        .map((n) => redactPII(String(n).slice(0, 300)).text);
+      return { ok: true, extractedText: text, visualNotes: notes };
+    }
+  }
+
   try {
     const zai = await ZAI.create();
     const response = await withTimeout(
@@ -95,20 +128,7 @@ export async function extractImageContent(dataUrl: string): Promise<ExtractImage
       "vlm-timeout"
     );
     const raw = response.choices[0]?.message?.content ?? "";
-    let parsed: { text?: string; notes?: string[] } | null = null;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const s = raw.indexOf("{");
-      const e = raw.lastIndexOf("}");
-      if (s >= 0 && e > s) {
-        try {
-          parsed = JSON.parse(raw.slice(s, e + 1));
-        } catch {
-          parsed = null;
-        }
-      }
-    }
+    const parsed = parseOcrJson(raw);
     if (!parsed || typeof parsed.text !== "string") {
       return { ok: false, error: "unparseable-ocr-output" };
     }
