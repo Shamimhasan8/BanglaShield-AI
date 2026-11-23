@@ -3254,11 +3254,15 @@ const SEEDED_DB_B64 = [
 
 const TARGET = "/tmp/banglashield.db";
 
-/** Runs once per serverless instance (cold start). Safe no-op elsewhere. */
+/** Runs once per serverless instance (cold start). Safe no-op elsewhere.
+ *  A MISSING DATABASE_URL is treated like a file: URL: the vercel-build
+ *  script falls back to file:../db/custom.db at build time, but that export
+ *  does not persist into the runtime environment — on Vercel with nothing
+ *  configured, DATABASE_URL is simply unset at runtime. */
 export function ensureServerlessDatabase(): void {
   if (!process.env.VERCEL) return; // serverless deployment only
   const url = process.env.DATABASE_URL ?? "";
-  if (!url.startsWith("file:")) return; // durable hosted DB configured — use it
+  if (url && !url.startsWith("file:")) return; // durable hosted DB configured — use it
   try {
     if (!existsSync(TARGET)) {
       writeFileSync(TARGET, Buffer.from(SEEDED_DB_B64, "base64"));
