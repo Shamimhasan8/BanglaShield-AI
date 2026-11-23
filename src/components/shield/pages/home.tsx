@@ -96,20 +96,6 @@ function LinkIcon({ size = 24, className }: IconProps) {
   );
 }
 
-function ArrowIcon({ size = 24, className }: IconProps) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
-      <path
-        d="m4 12h16m-6-6 6 6-6 6"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
 function PhoneIcon({ size = 24, className }: IconProps) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
@@ -135,8 +121,6 @@ const HERO = {
     bn: "একটি সন্দেহজনক কল, বার্তা, ছবি বা লিংক? ভয় পাওয়ার আগে বুঝুন। বাংলাশিল্ডের Guardian পাশে আছে—প্রমাণ দেখাতে, ঝুঁকি বোঝাতে, সঠিক সিদ্ধান্ত নিতে।",
     en: "A suspicious call, message, image or link? Understand it before fear takes over. Guardian helps you see the evidence, understand the risk and choose your next step.",
   },
-  ctaPrimary: { bn: "এখনই যাচাই করুন", en: "Check something now" },
-  ctaOutline: { bn: "Guardian-এর সাথে কথা বলুন", en: "Talk to Guardian" },
   note: { bn: "সহজ বাংলা · ব্যবহারকারীর নিয়ন্ত্রণে · এআই ভুল করতে পারে", en: "Plain language · You stay in control · AI can be wrong" },
   tablistLabel: { bn: "কাল্পনিক প্রতারণার উদাহরণ", en: "Fictional scam examples" },
   demoLabel: { bn: "ইন্টারঅ্যাকটিভ উদাহরণ · বাস্তব এআই বিশ্লেষণ নয়", en: "Interactive example · not a live AI analysis" },
@@ -417,16 +401,6 @@ export default function HomePage() {
               <strong>{t(HERO.h1b)}</strong>
             </h1>
             <p className="bsh-hero-sub">{t(HERO.sub)}</p>
-            <div className="bsh-actions">
-              <Link to="/check" className="bsh-btn bsh-btn-primary">
-                <span>{t(HERO.ctaPrimary)}</span>
-                <span className="bsh-btn-arrow" aria-hidden="true">↗</span>
-              </Link>
-              <Link to="/guardian" className="bsh-btn bsh-btn-outline">
-                <span>{t(HERO.ctaOutline)}</span>
-                <ArrowIcon size={16} />
-              </Link>
-            </div>
             <p className="bsh-note">{t(HERO.note)}</p>
           </div>
 
