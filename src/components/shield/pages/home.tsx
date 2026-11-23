@@ -129,8 +129,8 @@ function PhoneIcon({ size = 24, className }: IconProps) {
 
 const HERO = {
   overline: { bn: "প্রতিটি পরিবারের জন্য ডিজিটাল নিরাপত্তা", en: "Digital safety, for every family" },
-  h1a: { bn: "প্রতারণা থামুক।", en: "Stop the scam." },
-  h1b: { bn: "জীবনের গতি নয়।", en: "Not your life." },
+  h1a: { bn: "ডিজিটাল দুনিয়ায়", en: "In the digital world," },
+  h1b: { bn: "নিরাপদ থাকুক প্রতিটি পরিবার।", en: "may every family stay safe." },
   sub: {
     bn: "একটি সন্দেহজনক কল, বার্তা, ছবি বা লিংক? ভয় পাওয়ার আগে বুঝুন। বাংলাশিল্ডের Guardian পাশে আছে—প্রমাণ দেখাতে, ঝুঁকি বোঝাতে, সঠিক সিদ্ধান্ত নিতে।",
     en: "A suspicious call, message, image or link? Understand it before fear takes over. Guardian helps you see the evidence, understand the risk and choose your next step.",
