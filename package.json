@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
-    "vercel-build": "prisma generate && mkdir -p db && (DATABASE_URL=\"${DATABASE_URL:-file:../db/custom.db}\" prisma db push --skip-generate || echo \"warn: schema push skipped (non-fatal)\") && next build",
+    "vercel-build": "bash scripts/vercel-build.sh",
     "postinstall": "prisma generate",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",

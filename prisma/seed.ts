@@ -17,6 +17,15 @@ const now = Date.now();
 const daysAgo = (d: number) => new Date(now - d * DAY);
 
 async function main() {
+  // Idempotency guard: on a durable (hosted) database the seed must run only
+  // ONCE — re-running would wipe visitor-generated data on every redeploy.
+  const alreadySeeded = await db.user.findFirst({
+    where: { email: "analyst@banglashield.org" },
+  });
+  if (alreadySeeded) {
+    console.log("Seed: already seeded (analyst account exists) — skipping. Drop the data to reseed.");
+    return;
+  }
   console.log("Seeding BanglaShield database...");
 
   // ---- clean (demo reset) ----
