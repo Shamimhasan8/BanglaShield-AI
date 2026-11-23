@@ -166,42 +166,63 @@ export async function runAnalysisPipeline(args: RunPipelineArgs & { claimToken: 
   } else {
     await setStage(sessionId, claimToken, "ai_analyzing");
     const aiStart = Date.now();
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const outcome = await runAnalystAgent(
-        {
-          evidence,
-          redactedText,
-          modality,
-          urlHost: heuristic.urlAssessment?.host,
-          visualNotes: args.visualNotes,
-        },
-        gateFeedback
-      );
-      if (!outcome.ok) {
-        providerFailed = true;
-        activity.push("ai.provider", { bn: "এআই প্রদানকারী", en: "AI provider" }, "failed", `${outcome.error ?? "failed"} · ${outcome.servedBy ?? "unknown"}${outcome.model ? ` · ${outcome.model}` : ""}`);
-        break;
-      }
-      if (attempt > 0) {
-        activity.push("ai.provider", { bn: "এআই প্রদানকারী (পুনঃচেষ্টা সফল)", en: "AI provider (retry succeeded)" }, "ok", `LIVE_AI, attempt ${attempt + 1}`);
-      }
-      await setStage(sessionId, claimToken, "safety_gate");
-      try {
-        const payload = runSafetyGate(outcome.payload, { evidence, modality });
-        activity.push("ai.provider", { bn: "এআই বিশ্লেষণ সম্পন্ন", en: "AI analysis completed" }, "ok", `LIVE_AI · ${outcome.servedBy ?? "?"}${outcome.model ? `/${outcome.model}` : ""} · ${Date.now() - aiStart}ms${outcome.fallbackUsed ? " · fallback-model" : ""}`);
-        activity.push("safety.validation", { bn: "নিরাপত্তা যাচাই সম্পন্ন", en: "Safety validation completed" });
-        result = assembleResult(sessionId, modality, payload, evidence, heuristic.urlAssessment?.host, activity, args.detectedLanguage);
-        break;
-      } catch (err) {
-        if (err instanceof GateError) {
-          lastGateIssues = err.issues;
-          gateFeedback = err.issues.join("; ");
-          activity.push("safety.validation", { bn: "নিরাপত্তা যাচাই প্রত্যাখ্যাত", en: "Safety validation rejected" }, "failed", err.issues.join("; "));
-          continue; // retry once with feedback
+    // F-10 heartbeat: live AI calls run for minutes with no DB writes, which
+    // made a healthy run look "stale" to polls landing on other serverless
+    // instances (updatedAt went quiet) — those polls re-claimed and re-ran the
+    // case while the original was still working, and the collision surfaced
+    // to users as "recovery-failed". This claim-guarded beat refreshes
+    // jobClaimedAt every 30s so staleness detection (which now also checks
+    // claim age) can only ever fire for genuinely dead runs.
+    const beat = setInterval(() => {
+      void db.analysisSession
+        .updateMany({
+          where: { id: sessionId, status: "processing", jobClaimToken: claimToken },
+          data: { jobClaimedAt: new Date() },
+        })
+        .catch(() => {
+          /* best-effort beat — the claim guards below handle real loss */
+        });
+    }, 30_000);
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const outcome = await runAnalystAgent(
+          {
+            evidence,
+            redactedText,
+            modality,
+            urlHost: heuristic.urlAssessment?.host,
+            visualNotes: args.visualNotes,
+          },
+          gateFeedback
+        );
+        if (!outcome.ok) {
+          providerFailed = true;
+          activity.push("ai.provider", { bn: "এআই প্রদানকারী", en: "AI provider" }, "failed", `${outcome.error ?? "failed"} · ${outcome.servedBy ?? "unknown"}${outcome.model ? ` · ${outcome.model}` : ""}`);
+          break;
         }
-        providerFailed = true;
-        break;
+        if (attempt > 0) {
+          activity.push("ai.provider", { bn: "এআই প্রদানকারী (পুনঃচেষ্টা সফল)", en: "AI provider (retry succeeded)" }, "ok", `LIVE_AI, attempt ${attempt + 1}`);
+        }
+        await setStage(sessionId, claimToken, "safety_gate");
+        try {
+          const payload = runSafetyGate(outcome.payload, { evidence, modality });
+          activity.push("ai.provider", { bn: "এআই বিশ্লেষণ সম্পন্ন", en: "AI analysis completed" }, "ok", `LIVE_AI · ${outcome.servedBy ?? "?"}${outcome.model ? `/${outcome.model}` : ""} · ${Date.now() - aiStart}ms${outcome.fallbackUsed ? " · fallback-model" : ""}`);
+          activity.push("safety.validation", { bn: "নিরাপত্তা যাচাই সম্পন্ন", en: "Safety validation completed" });
+          result = assembleResult(sessionId, modality, payload, evidence, heuristic.urlAssessment?.host, activity, args.detectedLanguage);
+          break;
+        } catch (err) {
+          if (err instanceof GateError) {
+            lastGateIssues = err.issues;
+            gateFeedback = err.issues.join("; ");
+            activity.push("safety.validation", { bn: "নিরাপত্তা যাচাই প্রত্যাখ্যাত", en: "Safety validation rejected" }, "failed", err.issues.join("; "));
+            continue; // retry once with feedback
+          }
+          providerFailed = true;
+          break;
+        }
       }
+    } finally {
+      clearInterval(beat);
     }
   }
 
@@ -460,16 +481,26 @@ export function runPipelineInBackground(args: RunPipelineArgs): void {
  *   - attempts left and a persisted pendingInput → re-claim + re-dispatch
  *     (durable recovery; works across server restarts and instances);
  *   - otherwise → honest terminal "failed" (never an eternal spinner).
+ *
+ * F-10: staleness now requires the CLAIM to be old (jobClaimedAt), not just
+ * updatedAt. The pipeline heartbeats jobClaimedAt every 30s during multi-
+ * minute AI calls, so a healthy run on another serverless instance can never
+ * be mistaken for a dead one (which previously caused a duplicate re-run,
+ * superseded writes and spurious "recovery-failed" outcomes).
  */
 export async function failIfStaleProcessing(session: {
   id: string;
   status: string;
   updatedAt: Date;
+  jobClaimedAt: Date | null;
   jobAttempts: number;
   pendingInput: unknown;
 }): Promise<boolean> {
   if (session.status !== "processing") return false;
   if (Date.now() - session.updatedAt.getTime() < STALE_PROCESSING_MS) return false;
+  // Claim must ALSO be quiet past the stale window — the heartbeat keeps a
+  // live run's claim fresh even while updatedAt rests between stage changes.
+  if (session.jobClaimedAt && Date.now() - session.jobClaimedAt.getTime() < STALE_PROCESSING_MS) return false;
   if (running.has(session.id)) return false;
 
   // Recovery path: bounded re-dispatch from the persisted (redacted) input.
@@ -477,8 +508,17 @@ export async function failIfStaleProcessing(session: {
   const pending = session.pendingInput as PendingInput | null;
   if (attempts < MAX_JOB_ATTEMPTS && pending && pending.redactedText) {
     const newToken = randomUUID();
+    // Atomic guard: only take the case from a worker whose claim is genuinely
+    // stale (or was never claimed — legacy rows). A heartbeating worker can
+    // never lose its claim this way, even across instances.
+    const claimCutoff = new Date(Date.now() - STALE_PROCESSING_MS);
     const reclaim = await db.analysisSession.updateMany({
-      where: { id: session.id, status: "processing", deletedAt: null },
+      where: {
+        id: session.id,
+        status: "processing",
+        deletedAt: null,
+        OR: [{ jobClaimedAt: { lt: claimCutoff } }, { jobClaimedAt: null }],
+      },
       data: {
         jobClaimToken: newToken,
         jobClaimedAt: new Date(),
@@ -498,7 +538,9 @@ export async function failIfStaleProcessing(session: {
       },
     });
     running.add(session.id);
-    void (async () => {
+    // waitUntil (F-10): on serverless the recovered pipeline must outlive the
+    // poll response that spawned it, or it gets frozen mid-run.
+    const recovery = (async () => {
       try {
         await runAnalysisPipeline({
           sessionId: session.id,
@@ -522,6 +564,11 @@ export async function failIfStaleProcessing(session: {
         running.delete(session.id);
       }
     })();
+    try {
+      waitUntil(recovery);
+    } catch {
+      /* not in a Vercel context — the promise is already running */
+    }
     return false; // still processing (recovered) — the caller keeps polling
   }
 

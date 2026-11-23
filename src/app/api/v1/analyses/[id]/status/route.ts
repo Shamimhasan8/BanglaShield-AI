@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const session = await db.analysisSession.findUnique({
     where: { id },
-    select: { id: true, status: true, stage: true, riskCategory: true, error: true, deletedAt: true, updatedAt: true, visitorId: true, jobAttempts: true, pendingInput: true },
+    select: { id: true, status: true, stage: true, riskCategory: true, error: true, deletedAt: true, updatedAt: true, visitorId: true, jobClaimedAt: true, jobAttempts: true, pendingInput: true },
   });
   if (!session || session.deletedAt) return fail("not-found", "কেসটি খুঁজে পাওয়া যায়নি।", 404);
 
