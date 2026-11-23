@@ -257,7 +257,7 @@ const GUARDIAN = {
   evidenceKey: { bn: "জরুরি টাকা + তৃতীয় ব্যক্তির পরিচয় দাবি", en: "Urgent money + unverified identity" },
   evidenceTail: { bn: "— এগুলো প্রতারণার সম্ভাব্য কৌশল।", en: "— these can be scam tactics." },
   footNote: { bn: "শিক্ষামূলক উদাহরণ · লাইভ চ্যাট নয়", en: "Illustration · not a live chat" },
-  footLink: { bn: "↗ Guardian-এ যান", en: "↗ Go to Guardian" },
+  footLink: { bn: "Guardian-এ যান", en: "Go to Guardian" },
 };
 
 const STORY = {
@@ -268,7 +268,7 @@ const STORY = {
     bn: "রাহেলার ছেলে বিদেশে কাজ করে। এক রাতে ছেলের মতো কণ্ঠে ফোন এলো—“মা, এখনই টাকা পাঠাও।” গল্পটি কাল্পনিক, কিন্তু ভয় আর চাপের অনুভূতিটা বাস্তব। আমরা চাই, প্রতিটি রাহেলা যেন সিদ্ধান্তের আগে একবার থেমে যাচাই করতে পারেন।",
     en: "Rahela’s son works abroad. One night, someone sounds like him and asks for money. This story is fictional, but the pressure is familiar. We want every Rahela to pause and verify first.",
   },
-  link: { bn: "রাহেলার উদাহরণটি দেখুন ↗", en: "Explore Rahela’s example ↗" },
+  link: { bn: "রাহেলার উদাহরণটি দেখুন", en: "Explore Rahela’s example" },
   bubbleSmall: { bn: "অচেনা নম্বর • কাল্পনিক কল", en: "Unknown number · fictional call" },
   bubbleL1: { bn: "“মা, আমি বিপদে আছি।", en: "“Mom, I’m in trouble." },
   bubbleL2: { bn: "এখনই টাকা পাঠাও।”", en: "Send money now.”" },
@@ -289,7 +289,7 @@ const MORE = {
     {
       to: "/learn",
       cap: { bn: "01 / শেখা", en: "01 / Learn" },
-      title: { bn: "ScamAcademy ↗", en: "ScamAcademy ↗" },
+      title: { bn: "ScamAcademy", en: "ScamAcademy" },
       desc: {
         bn: "বাস্তবসম্মত কাল্পনিক পরিস্থিতিতে ভুল ও সঠিক সিদ্ধান্তের পার্থক্য শিখুন।",
         en: "Practice safer decisions in fictional real-world situations.",
@@ -298,7 +298,7 @@ const MORE = {
     {
       to: "/community",
       cap: { bn: "02 / কমিউনিটি", en: "02 / Community" },
-      title: { bn: "সবার সতর্কতা ↗", en: "Community warnings ↗" },
+      title: { bn: "সবার সতর্কতা", en: "Community warnings" },
       desc: {
         bn: "পর্যালোচিত প্রতারণার ধরন সম্পর্কে জানুন। নিজের অভিজ্ঞতাও জানাতে পারেন।",
         en: "Learn from reviewed scam patterns and community warnings.",
@@ -307,7 +307,7 @@ const MORE = {
     {
       to: "/help",
       cap: { bn: "03 / সহায়তা", en: "03 / Help" },
-      title: { bn: "বিপদে কী করবেন? ↗", en: "Need help? ↗" },
+      title: { bn: "বিপদে কী করবেন?", en: "Need help?" },
       desc: {
         bn: "টাকা বা তথ্য দিয়ে ফেললে কীভাবে দ্রুত নিরাপদ পদক্ষেপ নেবেন, জানুন।",
         en: "Learn what to do after sharing money or personal information.",
@@ -499,7 +499,6 @@ export default function HomePage() {
               const Icon = m.icon;
               return (
                 <Link key={m.to} to={m.to} className="bsh-feature-card">
-                  <span className="bsh-card-arrow" aria-hidden="true">↗</span>
                   <span className="bsh-feature-icon">
                     <Icon size={23} />
                   </span>
@@ -533,7 +532,7 @@ export default function HomePage() {
                 ))}
               </div>
               <Link to="/guardian" className="bsh-btn bsh-btn-primary">
-                {t(GUARDIAN.cta)} <span aria-hidden="true">↗</span>
+                {t(GUARDIAN.cta)}
               </Link>
             </div>
 
@@ -652,7 +651,7 @@ export default function HomePage() {
           <h2>{t(END.h2)}</h2>
           <p>{t(END.p)}</p>
           <Link to="/guardian" className="bsh-btn">
-            {t(END.cta)} <span aria-hidden="true">↗</span>
+            {t(END.cta)}
           </Link>
         </div>
       </section>
