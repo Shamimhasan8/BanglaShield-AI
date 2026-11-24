@@ -94,7 +94,10 @@ function stripUntrustedContacts(text: string): string {
 
 export async function chatWithShieldAgent(
   messages: ChatMessage[],
-  modelOverride?: string
+  modelOverride?: string,
+  /** Optional deterministic context block appended to the system prompt
+   *  (COU TECHNOVA 2026: server-resolved incident state). */
+  extraSystem?: string
 ): Promise<ChatOutcome> {
   // Trim history: keep the last 10 user/assistant turns (client also caps).
   // EVERY outbound turn is redacted — client-supplied assistant history is
@@ -107,7 +110,10 @@ export async function chatWithShieldAgent(
   const result = await gatewayChat({
     purpose: "chat",
     messages: [
-      { role: "system", content: CHAT_SYSTEM_PROMPT },
+      {
+        role: "system",
+        content: extraSystem ? `${CHAT_SYSTEM_PROMPT}\n\n${extraSystem}` : CHAT_SYSTEM_PROMPT,
+      },
       ...history,
     ],
     modelOverride,

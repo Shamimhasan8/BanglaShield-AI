@@ -248,6 +248,50 @@ Text and link presets run deterministically in `OFFLINE_DEMO` mode (no AI call),
 
 ---
 
+## COU TECHNOVA 2026 — assigned challenges (Team 35 — Rewoo, Nov 24 2026)
+
+Two hackathon challenges were implemented **inside the existing application** with the smallest safe changes; all prior features (verification routes, result pages, Guardian navigation, model selection, ScamAcademy, community, Shield Lens, emergency help, homepage) are preserved. New API fields are additive — old clients keep working.
+
+### Challenge 1 — Voice-based contextual incident reporting
+
+A person can now report a scam by voice inside Guardian chat, and the guidance **changes the moment they disclose sharing the verification code**.
+
+**Voice input (Guardian chat):** a microphone button next to the input with an explicit-consent gate → listening → processing → **editable transcript review/correction** → sending. It reuses the app's existing voice stack: `MediaRecorder` + parallel `bn-BD` browser `SpeechRecognition` (the Verify voice-tab technique, factored into `src/components/shield/voice-capture.ts`) and the existing server ASR engine (`transcribeAudio`) behind a new consent-enforced endpoint `POST /api/v1/agent/voice` (403 `consent-required` without explicit consent). Bangla / Banglish / English are supported; when the mic or ASR is unavailable the typed input always remains.
+
+**Deterministic incident state (never prompt-only):** `src/lib/incident-state.ts` is a pure resolver that folds the user's turns into `unknown | not_shared | shared` from Bangla/Banglish/English evidence — distinguishing negation ("না, দিইনি" / "I did not share") from admission ("দিয়ে ফেলেছি" / "I already shared") and detecting corrections ("আসলে…" / "actually…", latest statement wins). `src/lib/guardian-chat.ts` uses it before the model runs: a stage turn (follow-up question / preventive / recovery) is answered by the **deterministic rule flow** (`src/lib/incident-flow.ts`) — engine-labeled `incident-rules` — so the behavior works even when the AI provider is down; other turns still use the AI with the server-resolved state injected into the system prompt. The follow-up asks *whether* the code was shared and explicitly says the code itself is never needed; no reply ever asks for or prints an OTP/PIN/password, and contact numbers appear only from the verified directory (never in reply text). Each reply shows an honest label: `live-ai` / `rule-based-fallback` / `incident-rules` (deterministic) plus an incident-state badge.
+
+### Challenge 2 — Dynamic verified official contacts
+
+Guardian contact recommendations come **only** from a server-side directory read performed at response time.
+
+- **Policy (documented, deterministic):** `src/lib/verified-contacts.ts` checks `active`, applies a freshness policy (`verifiedAt` within **180 days**; future dates beyond a 2-day clock-skew tolerance rejected), and verifies the official source + URL hostnames (https, host allowlist, `sourceUrl` host matches `url` host; lookalike hosts embedding brand tokens like `verify-bkash.com` are rejected).
+- **Structured, server-validated data:** eligible contacts are returned as a typed payload (`source`, `directoryVersion`, items with `actionable` flag). Model- or user-generated numbers can never become cards (the deterministic contact filter masks them in replies too).
+- **Mid-conversation refresh:** every relevant response re-reads the directory — including *after* the AI call resolves, so a change that happened while the model was processing is already reflected. Responses carry a `directoryVersion`; when it changes, previously displayed cards re-render as **outdated (non-actionable)** and only the current list stays tappable.
+- **Fallback honesty:** when the authoritative directory is unreachable, the bundled snapshot is labeled `fallback` / *not currently verified*, with no actionable phone presented, plus a "verify independently" notice; if nothing eligible exists, a clear unavailable/verification-required state is shown and **no number is fabricated**.
+- **Preserved & cleaned:** the Emergency Help feature keeps working (`/api/v1/resources` gained only additive `eligible`/`exclusionReasons`/`contactPolicy` fields). The one stale hardcoded recommendation (`tel:16247` one-tap card on the help page) was replaced by the currently-eligible mfs directory record. No genuine official contact was modified for the demonstration.
+
+**Isolated demonstration:** `/#/technova-demo` runs a separate, in-memory **fictional demo directory** (Contact A / Contact B, clearly labeled `TEST DATA`) that never touches the real `VerifiedResource` table. Its transitions (deactivate A → verify B → deactivate/expire B) are real directory mutations flowing through the *same* eligibility pipeline — never a hardcoded demo response.
+
+### Testing and results
+
+```bash
+bun run test:challenges   # 26 tests, all required scenarios
+bun run typecheck         # tsc --noEmit — pass
+bun run lint              # eslint — pass
+```
+
+Verified results at submission time (local dev server + browser end-to-end):
+- **26/26 tests pass** covering: OTP mention without sharing → follow-up; "not shared" → preventive; later admission → recovery; corrections (both directions); Banglish/English equivalents; unclear transcription; microphone permission denied; AI-provider failure (deterministic flow still answers); Contact A→B replacement mid-conversation; A inactive; expired details; directory unavailable (fallback labeling); malicious lookalike domain; user-submitted fake contact; contact changes while the AI request is processing.
+- **`bun run build` was not run locally** (sandbox policy); the remote Vercel build of the pushed commit is the build evidence instead.
+- End-to-end browser verification: full voice-flow consent gate, the three-stage incident conversation, live-directory contact cards, help-page dynamic card, demo A→B→unavailable transitions, and regression checks (check tabs, homepage, Guardian navigation) all pass.
+
+### Judge demonstration recipes
+
+1. **Voice incident flow (Challenge 1):** open Guardian (`/#/guardian/chat`) → press the mic button → consent → speak (or type the transcript after review) — then run the conversation: "একজন ফোন করে আমার বিকাশের OTP চাইছে।" → Guardian asks whether the code was already shared → "না, দিইনি।" → preventive guidance → "আসলে আমি কোডটা দিয়ে ফেলেছি।" → recovery guidance with current verified contacts. Every reply is labeled; the incident-state badge flips `unknown → not_shared → shared` with "correction detected".
+2. **Dynamic contacts (Challenge 2):** open `/#/technova-demo` → send "আসলে আমি ওটিপি দিয়ে ফেলেছি" in its chat → Fictional Contact A is recommended → press "যোগাযোগ এ নিষ্ক্রিয় করুন" then "যোগাযোগ বি নতুন যাচাঈ করুন" → continue the same conversation ("তাহলে এখন কার সাথে যোগাযোগ করবো?") → only Contact B is recommended, the old card is marked outdated and is no longer tappable → press "যোগাযোগ বি নিষ্ক্রিয় করুন" (or expire) → the unavailable/verification-required state appears with no fabricated number. All contacts there are fictional TEST DATA; the real Guardian uses the live `VerifiedResource` directory.
+
+---
+
 ## 9. Known limitations (honest)
 
 - **Bengali ASR is provider-limited.** The ASR provider currently garbles Bengali audio. A garbled-output detector recognizes this shape and routes the user to the editable transcript with an honest message; typing the transcript manually (Bangla or Banglish) is always available. Transcription quality is never overstated.

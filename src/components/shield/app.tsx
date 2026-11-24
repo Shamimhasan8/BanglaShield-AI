@@ -26,6 +26,8 @@ const PrivacyPage = dynamic(() => import("./pages/privacy"), { loading: () => <P
 const AnalystPage = dynamic(() => import("./pages/analyst/analyst"), { loading: () => <PageSkeleton /> });
 const GuardianPage = dynamic(() => import("./pages/guardian"), { loading: () => <PageSkeleton /> });
 const ReportPage = dynamic(() => import("./pages/report"), { loading: () => <PageSkeleton /> });
+// COU TECHNOVA 2026 — isolated judge-demo environment (fictional TEST DATA).
+const TechnovaDemoPage = dynamic(() => import("./pages/technova-demo"), { loading: () => <PageSkeleton /> });
 
 function PageSkeleton() {
   return (
@@ -70,6 +72,8 @@ function Router({ path, parts }: { path: string; parts: string[] }) {
   if (parts[0] === "guardian") return <GuardianPage key={parts[1] ?? "overview"} initialTab={parts[1]} />;
   if (parts[0] === "community") return <CommunityPage />;
   if (parts[0] === "demo") return <DemoPage />;
+  // COU TECHNOVA 2026 — isolated judge-demo environment (fictional TEST DATA).
+  if (parts[0] === "technova-demo") return <TechnovaDemoPage />;
   if (parts[0] === "learn") return <LearnPage />;
   if (parts[0] === "privacy" || parts[0] === "settings") return <PrivacyPage tab={parts[0]} />;
   // Unified help: emergency triage + recovery checklist + verified directory.

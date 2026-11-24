@@ -40,6 +40,11 @@ interface Resource {
   phone: string | null;
   sourceUrl: string;
   verifiedAt: string;
+  /** COU TECHNOVA 2026 (Challenge 2): server-side eligibility from the same
+   *  freshness/hostname policy the Guardian uses — undefined = legacy
+   *  fallback shape (bundled snapshot). */
+  eligible?: boolean;
+  exclusionReasons?: string[];
 }
 
 type SituationKey = "money" | "otp" | "app" | "info" | "threat";
@@ -273,13 +278,19 @@ export default function RecoveryPage() {
 
   useEffect(() => {
     api
-      .get<{ resources: Resource[] }>("/api/v1/resources")
+      .get<{ resources: Resource[] }>('/api/v1/resources')
       .then((r) => setResources(r.resources))
       .catch(() => setResources([]))
       .finally(() => setLoadingRes(false));
   }, []);
 
   const anyYes = Object.values(answers).some(Boolean);
+
+  // COU TECHNOVA 2026 (Challenge 2): the second one-tap card used to be a
+  // HARDCODED bKash 16247 number, which could contradict the directory if it
+  // changes. It now renders the currently-ELIGIBLE mfs contact straight from
+  // the verified directory (fallback snapshot is never shown as actionable).
+  const eligibleMfs = resources.find((r) => r.category === "mfs" && r.phone && r.eligible !== false && (r.exclusionReasons ?? []).length === 0);
 
   const checklist = anyYes
     ? SITUATIONS.filter((s) => answers[s.key]).flatMap((s) => s.steps)
@@ -316,16 +327,38 @@ export default function RecoveryPage() {
             <span className="block text-xs text-[#59665F] bn-text">{bn ? "জাতীয় জরুরি সেবা" : "National emergency"}</span>
           </span>
         </a>
-        <a
-          href="tel:16247"
-          className="rounded-xl border-2 border-[#2F5746]/40 bg-[#FFFEFA] px-4 py-3.5 flex items-center gap-3 hover:bg-[#DDE8DF] transition-colors focus-ring"
-        >
-          <ShieldCheck className="h-6 w-6 text-[#2F5746] shrink-0" aria-hidden />
-          <span>
-            <span className="block text-xl font-bold text-[#2F5746] bn-text">১৬২৪৭</span>
-            <span className="block text-xs text-[#59665F] bn-text">{bn ? "বিকাশ হেল্পলাইন (নিজে কল করুন)" : "bKash helpline (call yourself)"}</span>
-          </span>
-        </a>
+        {eligibleMfs && eligibleMfs.phone ? (
+          <a
+            href={`tel:${eligibleMfs.phone}`}
+            className="rounded-xl border-2 border-[#2F5746]/40 bg-[#FFFEFA] px-4 py-3.5 flex items-center gap-3 hover:bg-[#DDE8DF] transition-colors focus-ring"
+            aria-label={bn ? `${eligibleMfs.name.bn} — নিজে কল করুন (ডিরেক্টরি থেকে)` : `${eligibleMfs.name.en} — call yourself (from the directory)`}
+          >
+            <ShieldCheck className="h-6 w-6 text-[#2F5746] shrink-0" aria-hidden />
+            <span>
+              <span className="block text-xl font-bold text-[#2F5746] bn-text">{eligibleMfs.phone}</span>
+              <span className="block text-xs text-[#59665F] bn-text">
+                {bn ? `${eligibleMfs.name.bn} (নিজে কল করুন · ডিরেক্টরির বর্তমান যাচাঈকৃত)` : `${eligibleMfs.name.en} (call yourself · current verified directory)`}
+              </span>
+            </span>
+          </a>
+        ) : (
+          <div
+            className="rounded-xl border-2 border-[#C9C2B2] bg-[#F4F1EB] px-4 py-3.5 flex items-center gap-3"
+            aria-live="polite"
+          >
+            <ShieldCheck className="h-6 w-6 text-[#7A756A] shrink-0" aria-hidden />
+            <span>
+              <span className="block text-base font-bold text-[#59665F] bn-text">
+                {bn ? "এমএফএস হেল্পলাইন — বর্তমান যাচাঈকৃত তথ্য নেই" : "MFS helpline — no current verified entry"}
+              </span>
+              <span className="block text-xs text-[#7A756A] bn-text">
+                {bn
+                  ? "নম্বর বানিয়ে দেওয়া হয় না — নিজে অ্যাপের ভেতরের হেল্প বা কার্ডে ছাপা নম্বর থেকে যোগাযোগ করুন।"
+                  : "We will not fabricate a number — use in-app support or the number printed on your card."}
+              </span>
+            </span>
+          </div>
+        )}
       </div>
 
       <Tabs defaultValue={defaultTab} key={defaultTab} className="gap-6">

@@ -63,9 +63,10 @@ db/
 Caddyfile
 mini-services/
 examples/
-tests/
 download/
 agent-ctx/
+# NOTE: tests/ is COMMITTED — it carries the COU TECHNOVA 2026 challenge
+# suite (bun run test:challenges). Only sandbox scratch dirs stay ignored.
 
 # local tooling artifacts
 tool-results/
